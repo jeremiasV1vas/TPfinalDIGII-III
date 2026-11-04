@@ -14,13 +14,13 @@
 // Un servo espera un pulso cada 20 ms.
 #define SERVO_PERIODO_US 20000
 
-// Entradas del ADC:
-//   AD0.0 (P0.23) base del maestro
-//   AD0.1 (P0.24) hombro del maestro
-//   AD0.2 (P0.25) codo del maestro
-//   AD0.4 (P1.30) garra del maestro
-//   AD0.5 (P1.31) corriente de la garra del esclavo
-// El AD0.3 no lo usamos porque comparte pin con la salida del DAC.
+// Canales del ADC. El AD0.3 no lo usamos porque comparte pin con la salida del DAC.
+#define POTE_BASE   0 // AD0.0 (P0.23)
+#define POTE_HOMBRO 1 // AD0.1 (P0.24)
+#define POTE_CODO   2 // AD0.2 (P0.25)
+#define POTE_GARRA  4 // AD0.4 (P1.30)
+// La corriente de la garra del esclavo entra por el AD0.5 (P1.31). Ese canal
+// lo lee el DMA, está fijo en sensores.c.
 
 // Cada cuánto interrumpe el SysTick. Coincide con el período de los servos.
 #define TICK_MS 20
