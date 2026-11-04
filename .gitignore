@@ -1,0 +1,24 @@
+# Salidas de compilación de MCUXpresso
+Debug/
+Release/
+*.o
+*.d
+*.axf
+*.bin
+*.hex
+*.map
+*.lss
+*.a
+
+# Archivos locales del IDE que cambian en cada máquina
+.metadata/
+*.launch
+.settings/language.settings.xml
+
+# Compilación del CI
+ci/build/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
