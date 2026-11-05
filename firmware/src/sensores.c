@@ -19,6 +19,14 @@ static volatile uint32_t muestras[MUESTRAS_CORRIENTE];
 // arranca de nuevo con la misma configuración y no para nunca.
 static GPDMA_LLI_T lista;
 
+// Una sola lectura del ADC tiene bastante ruido y el servo tiembla. Por eso los
+// potes se leen todo el tiempo y cada 20 ms nos quedamos con el promedio de las
+// unas 400 lecturas que se juntaron.
+static const uint8_t canales_potes[4] = {POTE_BASE, POTE_HOMBRO, POTE_CODO, POTE_GARRA};
+static uint32_t suma[8];
+static uint32_t cantidad[8];
+static uint16_t promedio[8];
+
 void sensores_init(void) {
     ADC_Init(FRECUENCIA_ADC);
 
@@ -82,8 +90,32 @@ void sensores_init(void) {
     ADC_BurstEnable();
 }
 
+void sensores_acumular(void) {
+    for (uint8_t i = 0; i < 4; i++) {
+        uint8_t canal = canales_potes[i];
+
+        // Solo sumamos si el canal terminó una conversión desde la última vez que lo miramos
+        if (ADC_ChannelGetStatus(canal, ADC_DATA_DONE) == SET) {
+            suma[canal] += ADC_ChannelGetData(canal);
+            cantidad[canal]++;
+        }
+    }
+}
+
+void sensores_promediar(void) {
+    for (uint8_t i = 0; i < 4; i++) {
+        uint8_t canal = canales_potes[i];
+
+        if (cantidad[canal] > 0) {
+            promedio[canal] = suma[canal] / cantidad[canal];
+        }
+        suma[canal] = 0;
+        cantidad[canal] = 0;
+    }
+}
+
 uint16_t sensores_pote(uint8_t canal) {
-    return ADC_ChannelGetData(canal);
+    return promedio[canal];
 }
 
 uint16_t sensores_corriente(void) {

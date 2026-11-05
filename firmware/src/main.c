@@ -29,9 +29,30 @@ static void led_init(void) {
     GPIO_SetPins(LED_PORT, 1UL << LED_PIN); // arranca apagado
 }
 
+// Si el pulso nuevo cambia menos que esto, no tocamos el servo. Así no
+// se mueve por cambios chiquitos del pote que son puro ruido.
+#define ZONA_MUERTA_US 4
+
+// Último pulso que le mandamos a cada servo (la posición 0 no se usa)
+static uint32_t pulso_actual[5];
+
 // Pasa la lectura de un pote (0 a 4095) a un pulso de servo (1000 a 2000 µs)
 static uint32_t pote_a_pulso(uint16_t lectura) {
     return 1000 + (uint32_t)lectura * 1000 / 4095;
+}
+
+static void mover_si_cambia(uint8_t servo, uint32_t pulso) {
+    uint32_t diferencia;
+    if (pulso > pulso_actual[servo]) {
+        diferencia = pulso - pulso_actual[servo];
+    } else {
+        diferencia = pulso_actual[servo] - pulso;
+    }
+
+    if (diferencia >= ZONA_MUERTA_US) {
+        pulso_actual[servo] = pulso;
+        servo_set_us(servo, pulso);
+    }
 }
 
 void SysTick_Handler(void) {
@@ -52,14 +73,17 @@ int main(void) {
     uint32_t ultimo_cambio_led = 0;
 
     while (1) {
-        // Una vez por tick (20 ms) actualizamos los servos
+        sensores_acumular();
+
+        // Una vez por tick (20 ms) promediamos los potes y actualizamos los servos
         if (ticks != ultimo_tick) {
             ultimo_tick = ticks;
+            sensores_promediar();
 
-            servo_set_us(SERVO_BASE, pote_a_pulso(sensores_pote(POTE_BASE)));
-            servo_set_us(SERVO_HOMBRO, pote_a_pulso(sensores_pote(POTE_HOMBRO)));
-            servo_set_us(SERVO_CODO, pote_a_pulso(sensores_pote(POTE_CODO)));
-            servo_set_us(SERVO_GARRA, pote_a_pulso(sensores_pote(POTE_GARRA)));
+            mover_si_cambia(SERVO_BASE, pote_a_pulso(sensores_pote(POTE_BASE)));
+            mover_si_cambia(SERVO_HOMBRO, pote_a_pulso(sensores_pote(POTE_HOMBRO)));
+            mover_si_cambia(SERVO_CODO, pote_a_pulso(sensores_pote(POTE_CODO)));
+            mover_si_cambia(SERVO_GARRA, pote_a_pulso(sensores_pote(POTE_GARRA)));
         }
 
         // Cambiamos el LED cada medio segundo

@@ -7,7 +7,13 @@
 
 void sensores_init(void);
 
-// Última lectura de un pote del maestro (POTE_BASE, POTE_HOMBRO, etc.), de 0 a 4095.
+// Suma las lecturas nuevas de los potes. Hay que llamarla todo el tiempo desde el while.
+void sensores_acumular(void);
+
+// Saca el promedio de lo que se juntó desde la última vez. Se llama una vez por tick.
+void sensores_promediar(void);
+
+// Promedio de un pote del maestro (POTE_BASE, POTE_HOMBRO, etc.) en el último tick, de 0 a 4095.
 uint16_t sensores_pote(uint8_t canal);
 
 // Promedio de la corriente de la garra en los últimos 20 ms, en cuentas del ADC (0 a 4095).
