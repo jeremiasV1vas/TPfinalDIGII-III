@@ -1,3 +1,12 @@
+/**
+ * @file sensores.c
+ * @brief ADC en modo burst para los potes y DMA para la corriente de la garra.
+ *
+ * El ADC convierte los 5 canales todo el tiempo, uno atrás del otro. A 100 kHz,
+ * a cada canal le tocan unas 20000 conversiones por segundo, o sea unas 400
+ * cada 20 ms, que es un período de los servos.
+ */
+
 #include "LPC17xx.h"
 #include "lpc17xx_adc.h"
 #include "lpc17xx_gpdma.h"
@@ -5,19 +14,30 @@
 #include "config.h"
 #include "sensores.h"
 
-// El ADC convierte los 5 canales todo el tiempo, uno atrás del otro (modo burst).
-// A 100 kHz, a cada canal le tocan unas 20000 conversiones por segundo, o sea
-// unas 400 cada 20 ms, que es un período de los servos.
-#define FRECUENCIA_ADC     100000
-#define MUESTRAS_CORRIENTE 400
+#define FRECUENCIA_ADC     100000 ///< Conversiones por segundo, entre todos los canales.
+#define MUESTRAS_CORRIENTE 400    ///< Lecturas de corriente en 20 ms.
 
-// Acá el DMA va guardando las lecturas de la corriente. Cuando llega al final
-// vuelve a empezar, así siempre están las de los últimos 20 ms.
+/**
+ * Acá el DMA va guardando las lecturas de la corriente. Cuando llega al final
+ * vuelve a empezar, así siempre están las de los últimos 20 ms.
+ */
 static volatile uint32_t muestras[MUESTRAS_CORRIENTE];
 
-// La lista del DMA apunta a sí misma: cuando termina de llenar el buffer,
-// arranca de nuevo con la misma configuración y no para nunca.
+/**
+ * La lista del DMA apunta a sí misma: cuando termina de llenar el buffer,
+ * arranca de nuevo con la misma configuración y no para nunca.
+ */
 static GPDMA_LLI_T lista;
+
+/**
+ * Una sola lectura del ADC tiene bastante ruido y el servo tiembla. Por eso los
+ * potes se leen todo el tiempo y cada 20 ms nos quedamos con el promedio de lo
+ * que se juntó. Los arreglos van por número de canal.
+ */
+static const uint8_t canales_potes[4] = {POTE_BASE, POTE_HOMBRO, POTE_CODO, POTE_GARRA};
+static uint32_t suma[8];
+static uint32_t cantidad[8];
+static uint16_t promedio[8];
 
 void sensores_init(void) {
     ADC_Init(FRECUENCIA_ADC);
@@ -82,14 +102,38 @@ void sensores_init(void) {
     ADC_BurstEnable();
 }
 
+void sensores_acumular(void) {
+    for (uint8_t i = 0; i < 4; i++) {
+        uint8_t canal = canales_potes[i];
+
+        // Solo sumamos si el canal terminó una conversión desde la última vez que lo miramos
+        if (ADC_ChannelGetStatus(canal, ADC_DATA_DONE) == SET) {
+            suma[canal] += ADC_ChannelGetData(canal);
+            cantidad[canal]++;
+        }
+    }
+}
+
+void sensores_promediar(void) {
+    for (uint8_t i = 0; i < 4; i++) {
+        uint8_t canal = canales_potes[i];
+
+        if (cantidad[canal] > 0) {
+            promedio[canal] = suma[canal] / cantidad[canal];
+        }
+        suma[canal] = 0;
+        cantidad[canal] = 0;
+    }
+}
+
 uint16_t sensores_pote(uint8_t canal) {
-    return ADC_ChannelGetData(canal);
+    return promedio[canal];
 }
 
 uint16_t sensores_corriente(void) {
-    uint32_t suma = 0;
+    uint32_t suma_corriente = 0;
     for (uint32_t i = 0; i < MUESTRAS_CORRIENTE; i++) {
-        suma += ADC_DR_RESULT(muestras[i]);
+        suma_corriente += ADC_DR_RESULT(muestras[i]);
     }
-    return suma / MUESTRAS_CORRIENTE;
+    return suma_corriente / MUESTRAS_CORRIENTE;
 }
