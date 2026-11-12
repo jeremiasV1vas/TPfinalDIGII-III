@@ -106,4 +106,13 @@
  */
 #define SECUENCIA_MAX 1500
 
+/**
+ * @name Comunicación con la PC
+ * UART2: TX en P0.10 (J2-40) y RX en P0.11 (J2-41), con un adaptador de 3,3 V.
+ * @{
+ */
+#define UART_BAUDIOS    115200
+#define TELEMETRIA_CADA 2 ///< Cada cuántos ticks se manda el estado a la PC (2 = 25 veces por segundo).
+/** @} */
+
 #endif

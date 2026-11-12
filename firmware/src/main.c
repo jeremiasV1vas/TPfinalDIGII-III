@@ -14,7 +14,12 @@
  *
  * Cada vez que cambia el modo, el esclavo va despacio (en 1 segundo) desde
  * donde está hasta donde tiene que ir, para que no pegue un salto.
+ *
+ * Cada TELEMETRIA_CADA ticks se manda el estado a la PC por la UART, para
+ * verlo en pc/interfaz.html.
  */
+
+#include <stdio.h>
 
 #include "LPC17xx.h"
 #include "lpc17xx_gpio.h"
@@ -26,6 +31,7 @@
 #include "garra.h"
 #include "secuencia.h"
 #include "sensores.h"
+#include "serie.h"
 #include "servos.h"
 
 /** Ticks que tarda el esclavo en llegar a la posición nueva al cambiar de modo (1 s). */
@@ -265,6 +271,30 @@ static void atender_botones(void) {
 }
 
 /* ---------------------------------------------------------------------------
+ * Comunicación con la PC
+ * ------------------------------------------------------------------------- */
+
+/**
+ * @brief Manda el estado a la PC en una línea:
+ *
+ * $T,modo,pote_base,pote_hombro,pote_codo,pote_garra,
+ * pulso_base,pulso_hombro,pulso_codo,pulso_garra,pasos_grabados
+ */
+static void enviar_estado(void) {
+    char texto[80];
+
+    sprintf(texto, "$T,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n",
+            (int)modo,
+            (int)sensores_pote(POTE_BASE), (int)sensores_pote(POTE_HOMBRO),
+            (int)sensores_pote(POTE_CODO), (int)sensores_pote(POTE_GARRA),
+            (int)servo_get_us(SERVO_BASE), (int)servo_get_us(SERVO_HOMBRO),
+            (int)servo_get_us(SERVO_CODO), (int)servo_get_us(SERVO_GARRA),
+            (int)secuencia_largo());
+
+    serie_enviar(texto);
+}
+
+/* ---------------------------------------------------------------------------
  * Programa principal
  * ------------------------------------------------------------------------- */
 
@@ -299,6 +329,10 @@ static void ciclo(void) {
     }
 
     led_actualizar();
+
+    if (ticks % TELEMETRIA_CADA == 0) {
+        enviar_estado();
+    }
 }
 
 void SysTick_Handler(void) {
@@ -312,6 +346,7 @@ int main(void) {
     sensores_init();
     garra_init();
     botones_init();
+    serie_init();
 
     // Arranca en modo copia, yendo despacio desde el medio hasta donde está el maestro
     cambiar_modo(MODO_COPIA);

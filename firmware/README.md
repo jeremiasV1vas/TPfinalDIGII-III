@@ -17,6 +17,7 @@ firmware/
 | `garra.c` | Garra del esclavo (por ahora, por posición) |
 | `botones.c` | Botones de grabar (EINT1, P2.11) y reproducir (EINT2, P2.12) |
 | `secuencia.c` | Pasos grabados en RAM, hasta 30 segundos |
+| `serie.c` | UART2 a 115200 (P0.10 y P0.11) para mandar el estado a la PC |
 
 Los comentarios están en formato Doxygen.
 
