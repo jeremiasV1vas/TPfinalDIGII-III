@@ -12,8 +12,10 @@ Release/
 
 # Archivos locales del IDE que cambian en cada máquina
 .metadata/
+.mcuxpressoide_packages_support/
+*_TAD_logs/
 *.launch
-.settings/language.settings.xml
+language.settings.xml
 
 # Python
 __pycache__/
