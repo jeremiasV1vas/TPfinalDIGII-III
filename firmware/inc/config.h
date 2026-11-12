@@ -13,11 +13,13 @@
 
 /**
  * @name LED de la placa
- * LED rojo de la LPCXpresso. Se prende con un 0.
+ * LED RGB de la LPCXpresso. Usamos el rojo y el verde, y los dos se prenden con un 0.
  * @{
  */
-#define LED_PORT PORT_0
-#define LED_PIN  PIN_22
+#define LED_ROJO_PORT  PORT_0
+#define LED_ROJO_PIN   PIN_22
+#define LED_VERDE_PORT PORT_3
+#define LED_VERDE_PIN  PIN_25
 /** @} */
 
 /**

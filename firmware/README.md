@@ -24,9 +24,9 @@ Los comentarios están en formato Doxygen.
 
 | Modo | Qué hace | LED |
 |---|---|---|
-| Copia | El esclavo sigue al maestro | Parpadeo lento |
-| Grabar | Copia y además guarda los pasos | Prendido |
-| Reproducir | Repite lo grabado una y otra vez | Parpadeo rápido |
+| Copia | El esclavo sigue al maestro | Rojo parpadeando lento |
+| Grabar | Copia y además guarda los pasos | Rojo fijo |
+| Reproducir | Repite lo grabado una y otra vez | Verde fijo |
 
 Arranca en *Copia*. Con el botón de grabar se entra y se sale de *Grabar*, y con el de reproducir se entra y se sale de *Reproducir*. Los botones van entre el pin y GND, sin resistencia (se usa el pull-up interno).
 

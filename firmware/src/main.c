@@ -57,37 +57,48 @@ static uint16_t paso_actual = 0;
  * LED
  * ------------------------------------------------------------------------- */
 
-static void led_init(void) {
+/** @brief Configura un pin del LED como salida y lo deja apagado. */
+static void led_pin_init(LPC_PORT port, uint32_t pin) {
     PINSEL_CFG_T led;
-    led.port = LED_PORT;
-    led.pin = LED_PIN;
+    led.port = port;
+    led.pin = pin;
     led.func = PINSEL_FUNC_00;
     led.mode = PINSEL_PULLUP;
     led.openDrain = DISABLE;
     PINSEL_ConfigPin(&led);
 
-    GPIO_SetDir(LED_PORT, 1UL << LED_PIN, GPIO_OUTPUT);
-    GPIO_SetPins(LED_PORT, 1UL << LED_PIN); // arranca apagado
+    GPIO_SetDir(port, 1UL << pin, GPIO_OUTPUT);
+    GPIO_SetPins(port, 1UL << pin); // con un 1 está apagado
+}
+
+static void led_init(void) {
+    led_pin_init(LED_ROJO_PORT, LED_ROJO_PIN);
+    led_pin_init(LED_VERDE_PORT, LED_VERDE_PIN);
 }
 
 /**
  * @brief Muestra el modo con el LED.
  *
- * Copia: parpadeo lento. Grabar: prendido. Reproducir: parpadeo rápido.
+ * Copia: rojo parpadeando lento. Grabar: rojo fijo. Reproducir: verde fijo.
  */
 static void led_actualizar(void) {
-    uint32_t cada = 0; // cada cuántos ticks cambia el LED
-
     switch (modo) {
-        case MODO_GRABAR:
-            GPIO_ClearPins(LED_PORT, 1UL << LED_PIN);
-            return;
-        case MODO_COPIA: cada = 500 / TICK_MS; break;
-        case MODO_REPRODUCIR: cada = 100 / TICK_MS; break;
-    }
+        case MODO_COPIA:
+            GPIO_SetPins(LED_VERDE_PORT, 1UL << LED_VERDE_PIN);
+            if (ticks % (500 / TICK_MS) == 0) {
+                GPIO_TogglePins(LED_ROJO_PORT, 1UL << LED_ROJO_PIN);
+            }
+            break;
 
-    if (ticks % cada == 0) {
-        GPIO_TogglePins(LED_PORT, 1UL << LED_PIN);
+        case MODO_GRABAR:
+            GPIO_SetPins(LED_VERDE_PORT, 1UL << LED_VERDE_PIN);
+            GPIO_ClearPins(LED_ROJO_PORT, 1UL << LED_ROJO_PIN);
+            break;
+
+        case MODO_REPRODUCIR:
+            GPIO_SetPins(LED_ROJO_PORT, 1UL << LED_ROJO_PIN);
+            GPIO_ClearPins(LED_VERDE_PORT, 1UL << LED_VERDE_PIN);
+            break;
     }
 }
 
