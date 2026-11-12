@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<!--
+  @file interfaz.html
+  @brief Interfaz en el navegador para ver lo que manda la placa por la UART.
+
+  Se abre con doble clic en Chrome, Edge o Chromium (Firefox no tiene Web Serial).
+  Con "Conectar" se elige el adaptador USB a serie y se leen las líneas de estado
+  que manda la placa cada 2 ticks (25 por segundo):
+
+    $T,modo,pote_base,pote_hombro,pote_codo,pote_garra,pulso_base,pulso_hombro,pulso_codo,pulso_garra,pasos
+
+  Hay un gráfico por servo con los últimos 10 segundos: el pulso que se le manda
+  al servo (en µs) y el pote del maestro (en cuentas del ADC).
+-->
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brazos maestro-esclavo</title>
+<style>
+  :root {
+    --fondo: #f4f5f7;
+    --tarjeta: #ffffff;
+    --texto: #1d2129;
+    --suave: #6b7280;
+    --borde: #dde1e6;
+    --grilla: #eceef1;
+    --pulso: #2563eb;
+    --pote: #ea7a1a;
+    --ok: #16a34a;
+    --mal: #dc2626;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --fondo: #15171b;
+      --tarjeta: #1e2127;
+      --texto: #e6e8eb;
+      --suave: #9aa1ab;
+      --borde: #30343c;
+      --grilla: #2a2e35;
+      --pulso: #60a5fa;
+      --pote: #f59e4b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 16px;
+    background: var(--fondo);
+    color: var(--texto);
+    font-family: system-ui, sans-serif;
+  }
+  header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px 24px;
+    margin-bottom: 16px;
+  }
+  h1 { font-size: 20px; margin: 0; flex: 1 1 auto; }
+  .dato { font-size: 14px; color: var(--suave); }
+  .dato b { color: var(--texto); font-size: 16px; }
+  button {
+    font: inherit;
+    padding: 8px 16px;
+    border: 1px solid var(--borde);
+    border-radius: 6px;
+    background: var(--tarjeta);
+    color: var(--texto);
+    cursor: pointer;
+  }
+  #conexion.conectado { color: var(--ok); }
+  #conexion.desconectado { color: var(--mal); }
+  .graficos {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    gap: 16px;
+  }
+  .tarjeta {
+    background: var(--tarjeta);
+    border: 1px solid var(--borde);
+    border-radius: 8px;
+    padding: 12px;
+  }
+  .tarjeta h2 {
+    font-size: 16px;
+    margin: 0 0 4px;
+    display: flex;
+    justify-content: space-between;
+  }
+  .valores { font-size: 13px; color: var(--suave); }
+  .valores .pulso { color: var(--pulso); }
+  .valores .pote { color: var(--pote); }
+  canvas { width: 100%; height: 200px; display: block; margin-top: 8px; }
+  #mensajes {
+    margin-top: 16px;
+    height: 120px;
+    overflow-y: auto;
+    font-family: monospace;
+    font-size: 13px;
+    white-space: pre-wrap;
+  }
+  @media (max-width: 400px) {
+    .graficos { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Brazos maestro-esclavo</h1>
+  <span class="dato">Modo: <b id="modo">-</b></span>
+  <span class="dato">Pasos grabados: <b id="pasos">-</b></span>
+  <span class="dato"><b id="conexion" class="desconectado">Desconectado</b></span>
+  <button id="boton-conectar">Conectar</button>
+</header>
+
+<div class="graficos" id="graficos"></div>
+
+<div class="tarjeta" id="mensajes"></div>
+
+<script>
+/** Nombre de cada modo, por número (igual que en main.c). */
+const MODOS = ["Copia", "Grabar", "Reproducir", "Manual"];
+
+/** Los 4 servos, en el mismo orden en que vienen en la línea $T. */
+const SERVOS = ["Base", "Hombro", "Codo", "Garra"];
+
+/** Cuántos números trae una línea $T. */
+const CANTIDAD_CAMPOS = 10;
+
+/** Cuántas muestras entran en el gráfico: 10 s a 25 líneas por segundo. */
+const MUESTRAS_GRAFICO = 250;
+
+/** Rango del eje del pulso, en µs. */
+const PULSO_MIN = 500;
+const PULSO_MAX = 2500;
+
+/** Rango del eje del pote, en cuentas del ADC de 12 bits. */
+const POTE_MIN = 0;
+const POTE_MAX = 4095;
+
+/** Para cada servo, la lista de las últimas muestras: {pulso, pote}. */
+const historial = SERVOS.map(() => []);
+
+/** Puerto serie abierto (null si no hay ninguno). */
+let puerto = null;
+
+/** Lector del puerto, para poder cortarlo al desconectar. */
+let lector = null;
+
+/* ---------- Armado de las tarjetas ---------- */
+
+const contenedor = document.getElementById("graficos");
+const lienzos = [];
+const textosValores = [];
+
+SERVOS.forEach((nombre) => {
+  const tarjeta = document.createElement("div");
+  tarjeta.className = "tarjeta";
+  tarjeta.innerHTML =
+    "<h2>" + nombre + "</h2>" +
+    "<div class='valores'>" +
+    "<span class='pulso'>■ Pulso: <b>-</b> µs</span> &nbsp; " +
+    "<span class='pote'>■ Pote: <b>-</b></span>" +
+    "</div>" +
+    "<canvas></canvas>";
+  contenedor.appendChild(tarjeta);
+  lienzos.push(tarjeta.querySelector("canvas"));
+  textosValores.push(tarjeta.querySelectorAll(".valores b"));
+});
+
+/* ---------- Lectura de las líneas ---------- */
+
+/**
+ * @brief Procesa una línea completa que llegó por la UART.
+ *
+ * Si es una línea $T, guarda los valores de cada servo. Si es otra cosa
+ * (respuestas a comandos, por ejemplo), la muestra abajo en los mensajes.
+ *
+ * @param linea Texto de la línea, sin el fin de línea.
+ */
+function procesarLinea(linea) {
+  if (!linea.startsWith("$T,")) {
+    if (linea.length > 0) {
+      agregarMensaje(linea);
+    }
+    return;
+  }
+
+  const numeros = linea.slice(3).split(",").map(Number);
+  if (numeros.length !== CANTIDAD_CAMPOS || numeros.some(isNaN)) {
+    return; // Línea cortada o con basura: se descarta.
+  }
+
+  const modo = numeros[0];
+  const potes = numeros.slice(1, 5);
+  const pulsos = numeros.slice(5, 9);
+  const pasos = numeros[9];
+
+  document.getElementById("modo").textContent = MODOS[modo] ?? modo;
+  document.getElementById("pasos").textContent = pasos;
+
+  for (let i = 0; i < SERVOS.length; i++) {
+    historial[i].push({ pulso: pulsos[i], pote: potes[i] });
+    if (historial[i].length > MUESTRAS_GRAFICO) {
+      historial[i].shift();
+    }
+    textosValores[i][0].textContent = pulsos[i];
+    textosValores[i][1].textContent = potes[i];
+  }
+}
+
+/**
+ * @brief Agrega una línea al cuadro de mensajes, con la hora.
+ * @param texto Lo que se quiere mostrar.
+ */
+function agregarMensaje(texto) {
+  const caja = document.getElementById("mensajes");
+  const hora = new Date().toLocaleTimeString();
+  caja.textContent += hora + "  " + texto + "\n";
+  caja.scrollTop = caja.scrollHeight;
+}
+
+/**
+ * @brief Pide el puerto al usuario, lo abre y lee hasta que se desconecte.
+ *
+ * Lo que llega se va juntando en "pendiente" hasta encontrar un fin de línea,
+ * porque una lectura puede traer media línea o varias juntas.
+ */
+async function conectar() {
+  if (!("serial" in navigator)) {
+    agregarMensaje("Este navegador no tiene Web Serial. Usá Chrome, Edge o Chromium.");
+    return;
+  }
+
+  try {
+    puerto = await navigator.serial.requestPort();
+    await puerto.open({ baudRate: 115200 });
+  } catch (error) {
+    agregarMensaje("No se pudo abrir el puerto: " + error.message);
+    puerto = null;
+    return;
+  }
+
+  mostrarConexion(true);
+  const decodificador = new TextDecoderStream();
+  const cerrado = puerto.readable.pipeTo(decodificador.writable).catch(() => {});
+  lector = decodificador.readable.getReader();
+  let pendiente = "";
+
+  try {
+    while (true) {
+      const { value, done } = await lector.read();
+      if (done) {
+        break;
+      }
+      pendiente += value;
+      const lineas = pendiente.split("\n");
+      pendiente = lineas.pop(); // Lo último puede ser media línea.
+      lineas.forEach((l) => procesarLinea(l.trim()));
+    }
+  } catch (error) {
+    agregarMensaje("Se cortó la conexión: " + error.message);
+  }
+
+  lector.releaseLock();
+  await cerrado;
+  await puerto.close().catch(() => {});
+  puerto = null;
+  lector = null;
+  mostrarConexion(false);
+}
+
+/** @brief Corta la lectura; conectar() se encarga de cerrar el puerto. */
+async function desconectar() {
+  if (lector) {
+    await lector.cancel();
+  }
+}
+
+/**
+ * @brief Actualiza el texto de conexión y el del botón.
+ * @param conectado true si el puerto está abierto.
+ */
+function mostrarConexion(conectado) {
+  const estado = document.getElementById("conexion");
+  estado.textContent = conectado ? "Conectado" : "Desconectado";
+  estado.className = conectado ? "conectado" : "desconectado";
+  document.getElementById("boton-conectar").textContent =
+    conectado ? "Desconectar" : "Conectar";
+}
+
+document.getElementById("boton-conectar").addEventListener("click", () => {
+  if (puerto) {
+    desconectar();
+  } else {
+    conectar();
+  }
+});
+
+/* ---------- Dibujo de los gráficos ---------- */
+
+/**
+ * @brief Dibuja el gráfico de un servo: el pulso con el eje a la izquierda y
+ *        el pote con el eje a la derecha.
+ * @param lienzo  El canvas donde se dibuja.
+ * @param muestras Lista de {pulso, pote}.
+ */
+function dibujarGrafico(lienzo, muestras) {
+  // Se ajusta el tamaño interno al de la pantalla para que no se vea borroso.
+  const escala = window.devicePixelRatio || 1;
+  const ancho = lienzo.clientWidth;
+  const alto = lienzo.clientHeight;
+  if (lienzo.width !== ancho * escala || lienzo.height !== alto * escala) {
+    lienzo.width = ancho * escala;
+    lienzo.height = alto * escala;
+  }
+  const ctx = lienzo.getContext("2d");
+  ctx.setTransform(escala, 0, 0, escala, 0, 0);
+  ctx.clearRect(0, 0, ancho, alto);
+
+  const estilos = getComputedStyle(document.documentElement);
+  const color = (nombre) => estilos.getPropertyValue(nombre).trim();
+
+  // Márgenes para los números de los ejes.
+  const izq = 40, der = 40, arriba = 8, abajo = 18;
+  const anchoUtil = ancho - izq - der;
+  const altoUtil = alto - arriba - abajo;
+
+  // Grilla horizontal con 4 divisiones y los números de cada eje.
+  ctx.font = "11px system-ui, sans-serif";
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = arriba + altoUtil * i / 4;
+    ctx.strokeStyle = color("--grilla");
+    ctx.beginPath();
+    ctx.moveTo(izq, y);
+    ctx.lineTo(ancho - der, y);
+    ctx.stroke();
+
+    ctx.fillStyle = color("--pulso");
+    ctx.textAlign = "right";
+    ctx.fillText(Math.round(PULSO_MAX - (PULSO_MAX - PULSO_MIN) * i / 4), izq - 4, y + 4);
+
+    ctx.fillStyle = color("--pote");
+    ctx.textAlign = "left";
+    ctx.fillText(Math.round(POTE_MAX - (POTE_MAX - POTE_MIN) * i / 4), ancho - der + 4, y + 4);
+  }
+
+  // Eje del tiempo: de -10 s (izquierda) a ahora (derecha).
+  ctx.fillStyle = color("--suave");
+  ctx.textAlign = "center";
+  for (let s = 0; s <= 10; s += 2) {
+    const x = izq + anchoUtil * s / 10;
+    ctx.fillText(s === 10 ? "0 s" : "-" + (10 - s), x, alto - 4);
+  }
+
+  // Las dos curvas. La muestra más nueva queda contra el borde derecho.
+  const curva = (campo, minimo, maximo, nombreColor) => {
+    ctx.strokeStyle = color(nombreColor);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    muestras.forEach((m, i) => {
+      const x = izq + anchoUtil * (MUESTRAS_GRAFICO - muestras.length + i) / (MUESTRAS_GRAFICO - 1);
+      const fraccion = (m[campo] - minimo) / (maximo - minimo);
+      const y = arriba + altoUtil * (1 - Math.min(Math.max(fraccion, 0), 1));
+      if (i === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    });
+    ctx.stroke();
+  };
+  curva("pote", POTE_MIN, POTE_MAX, "--pote");
+  curva("pulso", PULSO_MIN, PULSO_MAX, "--pulso");
+}
+
+/** @brief Redibuja los 4 gráficos en cada cuadro de la pantalla. */
+function dibujarTodo() {
+  for (let i = 0; i < SERVOS.length; i++) {
+    dibujarGrafico(lienzos[i], historial[i]);
+  }
+  requestAnimationFrame(dibujarTodo);
+}
+
+requestAnimationFrame(dibujarTodo);
+</script>
+</body>
+</html>
