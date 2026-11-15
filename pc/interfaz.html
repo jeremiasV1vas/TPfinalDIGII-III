@@ -11,6 +11,15 @@
 
   Hay un gráfico por servo con los últimos 10 segundos: el pulso que se le manda
   al servo (en µs) y el pote del maestro (en cuentas del ADC).
+
+  Arriba de los gráficos hay un dibujo 3D del brazo esclavo que se mueve en
+  tiempo real con los pulsos que llegan: base que gira, hombro, codo y garra.
+  En naranja y transparente se dibuja la posición del maestro (sus potes), así
+  se ve cuando el esclavo no lo está copiando (por ejemplo, al reproducir).
+  La vista se gira arrastrando con el mouse y se acerca con la rueda.
+
+  Para probar la página sin la placa, abrirla con "?demo" al final de la
+  dirección (por ejemplo interfaz.html?demo): genera datos inventados.
 -->
 <html lang="es">
 <head>
@@ -103,6 +112,45 @@
   @media (max-width: 400px) {
     .graficos { grid-template-columns: 1fr; }
   }
+
+  /* ---------- Animación del brazo ---------- */
+  .brazo {
+    display: grid;
+    grid-template-columns: 1fr 240px;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  .brazo h2 { font-size: 16px; margin: 0 0 4px; }
+  #lienzo-brazo {
+    height: 400px;
+    margin-top: 0;
+    cursor: grab;
+    touch-action: none;
+    border-radius: 6px;
+  }
+  #lienzo-brazo:active { cursor: grabbing; }
+  .panel-brazo { display: flex; flex-direction: column; gap: 12px; }
+  .articulacion { font-size: 13px; color: var(--suave); }
+  .articulacion .fila { display: flex; justify-content: space-between; }
+  .articulacion b { color: var(--texto); font-size: 15px; font-variant-numeric: tabular-nums; }
+  .barra {
+    height: 6px;
+    margin-top: 4px;
+    border-radius: 3px;
+    background: var(--grilla);
+    overflow: hidden;
+  }
+  .barra div { height: 100%; width: 50%; background: var(--pulso); border-radius: 3px; }
+  .vistas { display: flex; gap: 6px; flex-wrap: wrap; }
+  .vistas button { padding: 4px 10px; font-size: 13px; }
+  .leyenda { font-size: 12px; color: var(--suave); line-height: 1.6; }
+  .leyenda .pulso { color: var(--pulso); }
+  .leyenda .pote { color: var(--pote); }
+  .leyenda label { cursor: pointer; }
+  @media (max-width: 700px) {
+    .brazo { grid-template-columns: 1fr; }
+    #lienzo-brazo { height: 320px; }
+  }
 </style>
 </head>
 <body>
@@ -114,6 +162,28 @@
   <span class="dato"><b id="conexion" class="desconectado">Desconectado</b></span>
   <button id="boton-conectar">Conectar</button>
 </header>
+
+<div class="tarjeta brazo">
+  <div>
+    <h2>Brazo en tiempo real</h2>
+    <canvas id="lienzo-brazo"></canvas>
+  </div>
+  <div class="panel-brazo">
+    <div class="vistas">
+      <button data-vista="3d">3D</button>
+      <button data-vista="costado">Costado</button>
+      <button data-vista="arriba">Arriba</button>
+    </div>
+    <div id="articulaciones"></div>
+    <div class="leyenda">
+      <span class="pulso">■</span> Esclavo (pulsos a los servos)<br>
+      <label><input type="checkbox" id="ver-maestro" checked>
+        <span class="pote">■</span> Maestro (potes)</label><br>
+      Arrastrá para girar la vista, rueda para acercar,
+      doble clic para volver a la vista inicial.
+    </div>
+  </div>
+</div>
 
 <div class="graficos" id="graficos"></div>
 
@@ -148,6 +218,9 @@ let puerto = null;
 
 /** Lector del puerto, para poder cortarlo al desconectar. */
 let lector = null;
+
+/** Último estado que llegó: {pulsos, potes}, o null si todavía no llegó nada. */
+let ultimoEstado = null;
 
 /* ---------- Armado de las tarjetas ---------- */
 
@@ -209,6 +282,8 @@ function procesarLinea(linea) {
     textosValores[i][0].textContent = pulsos[i];
     textosValores[i][1].textContent = potes[i];
   }
+
+  ultimoEstado = { pulsos, potes };
 }
 
 /**
@@ -386,6 +461,453 @@ function dibujarTodo() {
 }
 
 requestAnimationFrame(dibujarTodo);
+
+/* ---------- Animación del brazo ---------- */
+
+/*
+ * Cómo se pasa de pulso a ángulo. Con 1500 µs el servo está en el medio
+ * (90°) y entre 1000 y 2000 µs recorre GRADOS_RECORRIDO. Si en el dibujo una
+ * articulación gira al revés que en el brazo de verdad, se pone -1 en SENTIDO.
+ */
+const PULSO_CENTRO = 1500;
+const GRADOS_RECORRIDO = 180;
+const SENTIDO = { base: 1, hombro: 1, codo: 1 };
+
+/** Garra (igual que GARRA_ABIERTA_US y GARRA_CERRADA_US de config.h). */
+const GARRA_ABIERTA_US = 1000;
+const GARRA_CERRADA_US = 2000;
+
+/** Cuánto se abre cada mandíbula, en grados, con la garra abierta del todo. */
+const APERTURA_MAX = 35;
+
+/** Medidas del dibujo, en cm (aproximadas, solo para que se vea parecido). */
+const MEDIDAS = { alturaBase: 6, brazo: 9, antebrazo: 8, garra: 3.5 };
+
+/*
+ * Calibración del maestro, copiada de config.h, para pasar los potes a
+ * pulsos y dibujar dónde está el maestro.
+ */
+const CALIBRACION = [
+  { poteA: 0, poteB: 4095, pulsoA: 1000, pulsoB: 2000 }, // Base
+  { poteA: 0, poteB: 4095, pulsoA: 1000, pulsoB: 2000 }, // Hombro
+  { poteA: 0, poteB: 4095, pulsoA: 1000, pulsoB: 2000 }, // Codo
+];
+const GARRA_POTE_SUELTA = 0;
+const GARRA_POTE_APRETADA = 4095;
+
+/** Límites de los servos (servos.c). */
+const SERVO_MIN_US = 1000;
+const SERVO_MAX_US = 2000;
+
+/** Cuántos segundos de recorrido de la punta se dibujan como estela. */
+const SEGUNDOS_ESTELA = 2.5;
+
+const lienzoBrazo = document.getElementById("lienzo-brazo");
+const VISTAS = {
+  "3d":    { giro: 125, inclinacion: 22, zoom: 1 },
+  costado: { giro: 90,  inclinacion: 2,  zoom: 1 },
+  arriba:  { giro: 90,  inclinacion: 88, zoom: 0.92 },
+};
+const camara = { ...VISTAS["3d"] };
+
+/** Ángulos que se están dibujando; se acercan de a poco a los que llegaron. */
+let poseEsclavo = null;
+let poseMaestro = null;
+
+/** Últimas posiciones de la punta de la garra: {punto, tiempo}. */
+const estela = [];
+
+const limitar = (x, minimo, maximo) => Math.min(Math.max(x, minimo), maximo);
+const radianes = (grados) => grados * Math.PI / 180;
+
+/**
+ * @brief Pasa los 4 pulsos (µs) a la pose del brazo.
+ * @return {base, hombro, codo, cierre}: base en grados desde el frente,
+ *         hombro como elevación del brazo, codo desde la posición en ángulo
+ *         recto y cierre de la garra de 0 (abierta) a 1 (cerrada).
+ */
+function poseDesdePulsos(pulsos) {
+  const grados = (pulso) => (pulso - PULSO_CENTRO) * GRADOS_RECORRIDO / 1000;
+  return {
+    base: grados(pulsos[0]) * SENTIDO.base,
+    hombro: 90 + grados(pulsos[1]) * SENTIDO.hombro,
+    codo: grados(pulsos[2]) * SENTIDO.codo,
+    cierre: limitar((pulsos[3] - GARRA_ABIERTA_US) / (GARRA_CERRADA_US - GARRA_ABIERTA_US), 0, 1),
+  };
+}
+
+/** @brief Pasa los potes del maestro a pulsos, con la misma cuenta que main.c. */
+function pulsosDesdePotes(potes) {
+  const pulsos = CALIBRACION.map((c, i) => {
+    const pulso = c.pulsoA + (potes[i] - c.poteA) * (c.pulsoB - c.pulsoA) / (c.poteB - c.poteA);
+    return limitar(pulso, SERVO_MIN_US, SERVO_MAX_US);
+  });
+  const cierre = limitar((potes[3] - GARRA_POTE_SUELTA) / (GARRA_POTE_APRETADA - GARRA_POTE_SUELTA), 0, 1);
+  pulsos.push(GARRA_ABIERTA_US + (GARRA_CERRADA_US - GARRA_ABIERTA_US) * cierre);
+  return pulsos;
+}
+
+/** @brief Mueve la pose dibujada hacia la nueva, para que no salte. */
+function suavizar(actual, nueva, k) {
+  if (!actual) {
+    return { ...nueva };
+  }
+  for (const clave in nueva) {
+    actual[clave] += (nueva[clave] - actual[clave]) * k;
+  }
+  return actual;
+}
+
+/**
+ * @brief Calcula los puntos del brazo en 3D (x hacia el frente, y a la
+ *        izquierda, z hacia arriba), en cm.
+ */
+function puntosDelBrazo(pose) {
+  const giro = radianes(pose.base);
+  const frente = { x: Math.cos(giro), y: Math.sin(giro) };
+  const costado = { x: -Math.sin(giro), y: Math.cos(giro) };
+
+  // Punto a "alcance" cm hacia adelante y "altura" cm hacia arriba.
+  const enPlano = (alcance, altura) =>
+    ({ x: frente.x * alcance, y: frente.y * alcance, z: altura });
+  const sumar = (a, b, n = 1) => ({ x: a.x + b.x * n, y: a.y + b.y * n, z: a.z + b.z * n });
+
+  const e1 = radianes(pose.hombro);
+  const e2 = radianes(pose.hombro - 90 + pose.codo);
+  const hombro = { x: 0, y: 0, z: MEDIDAS.alturaBase };
+  const codo = sumar(hombro, enPlano(Math.cos(e1), Math.sin(e1)), MEDIDAS.brazo);
+  const muneca = sumar(codo, enPlano(Math.cos(e2), Math.sin(e2)), MEDIDAS.antebrazo);
+
+  // Las dos mandíbulas se abren hacia los costados.
+  const adelante = enPlano(Math.cos(e2), Math.sin(e2));
+  const lado = { x: costado.x, y: costado.y, z: 0 };
+  const abierta = radianes(APERTURA_MAX * (1 - pose.cierre));
+  const mandibula = (signo) => {
+    const raiz = sumar(muneca, lado, 0.9 * signo);
+    const direccion = sumar({ x: adelante.x * Math.cos(abierta), y: adelante.y * Math.cos(abierta), z: adelante.z * Math.cos(abierta) },
+                            lado, Math.sin(abierta) * signo);
+    // Se termina 0.35 cm antes del centro para que cerrada se vean las dos.
+    const punta = sumar(raiz, direccion, MEDIDAS.garra);
+    return { raiz, punta: sumar(punta, lado, -0.55 * signo * (1 - Math.sin(abierta))) };
+  };
+  const izquierda = mandibula(1);
+  const derecha = mandibula(-1);
+  const punta = {
+    x: (izquierda.punta.x + derecha.punta.x) / 2,
+    y: (izquierda.punta.y + derecha.punta.y) / 2,
+    z: (izquierda.punta.z + derecha.punta.z) / 2,
+  };
+  return { hombro, codo, muneca, izquierda, derecha, punta };
+}
+
+/** @brief Pasa un punto 3D a la pantalla, con un poco de perspectiva. */
+function proyectar(p, ancho, alto) {
+  const g = radianes(camara.giro);
+  const inc = radianes(camara.inclinacion);
+  const z = p.z - 9; // Se centra la vista a media altura del brazo.
+  const x1 = p.x * Math.sin(g) - p.y * Math.cos(g);
+  const y1 = p.x * Math.cos(g) + p.y * Math.sin(g);
+  const arriba = z * Math.cos(inc) + y1 * Math.sin(inc);
+  const profundidad = y1 * Math.cos(inc) - z * Math.sin(inc);
+  const f = 70 / (70 + profundidad);
+  const escala = Math.min(ancho / 56, alto / 44) * camara.zoom;
+  return {
+    x: ancho / 2 + x1 * f * escala,
+    y: alto * 0.44 - arriba * f * escala,
+    profundidad,
+    tamano: f * escala, // Píxeles por cm en ese punto.
+  };
+}
+
+/** @brief Dibuja el brazo y lo que lo rodea en el canvas. */
+function dibujarBrazo(dt) {
+  const escalaPantalla = window.devicePixelRatio || 1;
+  const ancho = lienzoBrazo.clientWidth;
+  const alto = lienzoBrazo.clientHeight;
+  if (lienzoBrazo.width !== ancho * escalaPantalla || lienzoBrazo.height !== alto * escalaPantalla) {
+    lienzoBrazo.width = ancho * escalaPantalla;
+    lienzoBrazo.height = alto * escalaPantalla;
+  }
+  const ctx = lienzoBrazo.getContext("2d");
+  ctx.setTransform(escalaPantalla, 0, 0, escalaPantalla, 0, 0);
+  ctx.clearRect(0, 0, ancho, alto);
+
+  const estilos = getComputedStyle(document.documentElement);
+  const color = (nombre) => estilos.getPropertyValue(nombre).trim();
+  const oscuro = matchMedia("(prefers-color-scheme: dark)").matches;
+  const P = (p) => proyectar(p, ancho, alto);
+
+  // Pose a dibujar: si todavía no llegó nada, el brazo queda en el medio.
+  const pulsos = ultimoEstado ? ultimoEstado.pulsos : [1500, 1500, 1500, GARRA_ABIERTA_US];
+  const k = 1 - Math.exp(-dt / 0.06);
+  poseEsclavo = suavizar(poseEsclavo, poseDesdePulsos(pulsos), k);
+  if (ultimoEstado) {
+    poseMaestro = suavizar(poseMaestro, poseDesdePulsos(pulsosDesdePotes(ultimoEstado.potes)), k);
+  }
+
+  // Piso: anillos, rayos y los grados de la base (como ángulo del servo).
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = color("--grilla");
+  for (const radio of [8, 14, 20]) {
+    ctx.beginPath();
+    for (let i = 0; i <= 72; i++) {
+      const a = (i / 72) * 2 * Math.PI;
+      const q = P({ x: radio * Math.cos(a), y: radio * Math.sin(a), z: 0 });
+      i === 0 ? ctx.moveTo(q.x, q.y) : ctx.lineTo(q.x, q.y);
+    }
+    ctx.stroke();
+  }
+  ctx.font = "11px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  for (let servo = 0; servo <= 180; servo += 45) {
+    const a = radianes((servo - 90) * SENTIDO.base);
+    const q1 = P({ x: 8 * Math.cos(a), y: 8 * Math.sin(a), z: 0 });
+    const q2 = P({ x: 20 * Math.cos(a), y: 20 * Math.sin(a), z: 0 });
+    const q3 = P({ x: 22.5 * Math.cos(a), y: 22.5 * Math.sin(a), z: 0 });
+    ctx.strokeStyle = color("--grilla");
+    ctx.beginPath(); ctx.moveTo(q1.x, q1.y); ctx.lineTo(q2.x, q2.y); ctx.stroke();
+    ctx.fillStyle = color("--suave");
+    ctx.fillText(servo + "°", q3.x, q3.y + 4);
+  }
+
+  // Sector del piso que marca hacia dónde mira la base.
+  const aBase = radianes(poseEsclavo.base);
+  ctx.fillStyle = color("--pulso");
+  ctx.globalAlpha = 0.15;
+  ctx.beginPath();
+  const centro = P({ x: 0, y: 0, z: 0 });
+  ctx.moveTo(centro.x, centro.y);
+  for (let i = 0; i <= 12; i++) {
+    const a = aBase - 0.12 + 0.24 * i / 12;
+    const q = P({ x: 20 * Math.cos(a), y: 20 * Math.sin(a), z: 0 });
+    ctx.lineTo(q.x, q.y);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.globalAlpha = 1;
+
+  // Sombra del esclavo en el piso.
+  const esclavo = puntosDelBrazo(poseEsclavo);
+  const piso = (p) => P({ x: p.x, y: p.y, z: 0 });
+  ctx.strokeStyle = oscuro ? "rgba(0,0,0,0.45)" : "rgba(0,0,0,0.12)";
+  ctx.lineCap = "round";
+  const sombra = [[esclavo.hombro, esclavo.codo, 1.6], [esclavo.codo, esclavo.muneca, 1.3],
+                  [esclavo.izquierda.raiz, esclavo.izquierda.punta, 0.6],
+                  [esclavo.derecha.raiz, esclavo.derecha.punta, 0.6]];
+  for (const [a, b, g] of sombra) {
+    const qa = piso(a), qb = piso(b);
+    ctx.lineWidth = g * qa.tamano;
+    ctx.beginPath(); ctx.moveTo(qa.x, qa.y); ctx.lineTo(qb.x, qb.y); ctx.stroke();
+  }
+
+  // Estela de la punta de la garra.
+  const ahora = performance.now() / 1000;
+  estela.push({ punto: esclavo.punta, tiempo: ahora });
+  while (estela.length && ahora - estela[0].tiempo > SEGUNDOS_ESTELA) {
+    estela.shift();
+  }
+  ctx.strokeStyle = color("--pulso");
+  ctx.lineWidth = 2;
+  for (let i = 1; i < estela.length; i++) {
+    const qa = P(estela[i - 1].punto), qb = P(estela[i].punto);
+    ctx.globalAlpha = 0.5 * (1 - (ahora - estela[i].tiempo) / SEGUNDOS_ESTELA);
+    ctx.beginPath(); ctx.moveTo(qa.x, qa.y); ctx.lineTo(qb.x, qb.y); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  // Base fija y torreta que gira, dibujadas como cilindros.
+  cilindro(ctx, P, 0, 0.8, 7, 0, oscuro ? "#3a3f48" : "#c9ced6", oscuro ? "#4a505b" : "#dfe3e8");
+  cilindro(ctx, P, 0.8, MEDIDAS.alturaBase - 0.6, 3.2, aBase, oscuro ? "#2f4a7a" : "#9db8ec", oscuro ? "#3d5d96" : "#bcd0f5");
+
+  // Los eslabones de los dos brazos, de atrás hacia adelante.
+  // El maestro va primero y aparte, así nunca tapa ni tiñe al esclavo.
+  const dibujarPiezas = (piezas) => {
+    piezas.sort((a, b) => b.profundidad - a.profundidad);
+    piezas.forEach((pieza) => pieza.dibujar(ctx, P));
+  };
+  if (poseMaestro && document.getElementById("ver-maestro").checked) {
+    const piezasMaestro = [];
+    agregarPiezas(piezasMaestro, puntosDelBrazo(poseMaestro), color("--pote"), 0.4);
+    dibujarPiezas(piezasMaestro);
+  }
+  const piezasEsclavo = [];
+  agregarPiezas(piezasEsclavo, esclavo, color("--pulso"), 1);
+  dibujarPiezas(piezasEsclavo);
+
+  if (!ultimoEstado) {
+    ctx.fillStyle = color("--suave");
+    ctx.font = "13px system-ui, sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("Esperando datos de la placa…", 12, 20);
+  }
+}
+
+/**
+ * @brief Dibuja un cilindro vertical (centrado en el eje z) con una marca que
+ *        indica hacia dónde mira.
+ */
+function cilindro(ctx, P, z0, z1, radio, giro, colorCostado, colorTapa) {
+  const N = 36;
+  const caras = [];
+  for (let i = 0; i < N; i++) {
+    const a = (i / N) * 2 * Math.PI, b = ((i + 1) / N) * 2 * Math.PI;
+    const p = [
+      P({ x: radio * Math.cos(a), y: radio * Math.sin(a), z: z0 }),
+      P({ x: radio * Math.cos(b), y: radio * Math.sin(b), z: z0 }),
+      P({ x: radio * Math.cos(b), y: radio * Math.sin(b), z: z1 }),
+      P({ x: radio * Math.cos(a), y: radio * Math.sin(a), z: z1 }),
+    ];
+    // Un poco más oscuro de un lado, para que se note el volumen.
+    const luz = 0.75 + 0.25 * Math.cos((a + b) / 2 - 2.2);
+    caras.push({ p, luz, profundidad: (p[0].profundidad + p[1].profundidad) / 2 });
+  }
+  caras.sort((a, b) => b.profundidad - a.profundidad);
+  for (const cara of caras) {
+    ctx.fillStyle = colorCostado;
+    ctx.globalAlpha = 1;
+    ctx.beginPath();
+    cara.p.forEach((q, i) => (i === 0 ? ctx.moveTo(q.x, q.y) : ctx.lineTo(q.x, q.y)));
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#000";
+    ctx.globalAlpha = (1 - cara.luz) * 0.6;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+  ctx.fillStyle = colorTapa;
+  ctx.beginPath();
+  for (let i = 0; i <= N; i++) {
+    const a = (i / N) * 2 * Math.PI;
+    const q = P({ x: radio * Math.cos(a), y: radio * Math.sin(a), z: z1 });
+    i === 0 ? ctx.moveTo(q.x, q.y) : ctx.lineTo(q.x, q.y);
+  }
+  ctx.fill();
+  // Marca hacia el frente.
+  const q0 = P({ x: radio * 0.4 * Math.cos(giro), y: radio * 0.4 * Math.sin(giro), z: z1 });
+  const q1 = P({ x: radio * 0.95 * Math.cos(giro), y: radio * 0.95 * Math.sin(giro), z: z1 });
+  ctx.strokeStyle = "rgba(0,0,0,0.35)";
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(q0.x, q0.y); ctx.lineTo(q1.x, q1.y); ctx.stroke();
+}
+
+/**
+ * @brief Arma la lista de piezas de un brazo (eslabones y articulaciones),
+ *        cada una con su profundidad para poder ordenarlas.
+ */
+function agregarPiezas(piezas, b, colorBrazo, opacidad) {
+  const barra = (a, c, grosor) => piezas.push({
+    profundidad: (proyectar(a, 1, 1).profundidad + proyectar(c, 1, 1).profundidad) / 2,
+    dibujar(ctx, P) {
+      const qa = P(a), qc = P(c);
+      ctx.globalAlpha = opacidad;
+      ctx.lineCap = "round";
+      ctx.strokeStyle = "rgba(0,0,0,0.35)";
+      ctx.lineWidth = grosor * (qa.tamano + qc.tamano) / 2 + 2;
+      ctx.beginPath(); ctx.moveTo(qa.x, qa.y); ctx.lineTo(qc.x, qc.y); ctx.stroke();
+      ctx.strokeStyle = colorBrazo;
+      ctx.lineWidth = grosor * (qa.tamano + qc.tamano) / 2;
+      ctx.beginPath(); ctx.moveTo(qa.x, qa.y); ctx.lineTo(qc.x, qc.y); ctx.stroke();
+      ctx.globalAlpha = 1;
+    },
+  });
+  const junta = (p, radio) => piezas.push({
+    profundidad: proyectar(p, 1, 1).profundidad - 0.5,
+    dibujar(ctx, P) {
+      const q = P(p);
+      ctx.globalAlpha = opacidad;
+      ctx.fillStyle = "#2b2f36";
+      ctx.beginPath(); ctx.arc(q.x, q.y, radio * q.tamano, 0, 2 * Math.PI); ctx.fill();
+      ctx.fillStyle = "#e6e8eb";
+      ctx.beginPath(); ctx.arc(q.x, q.y, radio * q.tamano * 0.35, 0, 2 * Math.PI); ctx.fill();
+      ctx.globalAlpha = 1;
+    },
+  });
+  barra(b.hombro, b.codo, 1.6);
+  barra(b.codo, b.muneca, 1.3);
+  barra(b.izquierda.raiz, b.derecha.raiz, 0.7);
+  barra(b.izquierda.raiz, b.izquierda.punta, 0.55);
+  barra(b.derecha.raiz, b.derecha.punta, 0.55);
+  junta(b.hombro, 1.25);
+  junta(b.codo, 1.05);
+  junta(b.muneca, 0.75);
+}
+
+/* Panel con el ángulo de cada articulación. */
+const NOMBRES_ARTICULACION = ["Base", "Hombro", "Codo", "Garra"];
+document.getElementById("articulaciones").innerHTML = NOMBRES_ARTICULACION.map((n) =>
+  "<div class='articulacion'><div class='fila'><span>" + n + "</span><b>-</b></div>" +
+  "<div class='barra'><div></div></div></div>").join("");
+const filasArticulacion = document.querySelectorAll(".articulacion");
+
+/** @brief Actualiza los ángulos del panel (como ángulo del servo, 0 a 180°). */
+function actualizarPanel() {
+  if (!ultimoEstado) {
+    return;
+  }
+  ultimoEstado.pulsos.forEach((pulso, i) => {
+    const fraccion = limitar((pulso - SERVO_MIN_US) / (SERVO_MAX_US - SERVO_MIN_US), 0, 1);
+    const texto = i === 3
+      ? Math.round(limitar((pulso - GARRA_ABIERTA_US) / (GARRA_CERRADA_US - GARRA_ABIERTA_US), 0, 1) * 100) + "% cerrada"
+      : Math.round(fraccion * GRADOS_RECORRIDO) + "°";
+    filasArticulacion[i].querySelector("b").textContent = texto;
+    filasArticulacion[i].querySelector(".barra div").style.width = (fraccion * 100) + "%";
+  });
+}
+
+/* Mover la cámara con el mouse o el dedo. */
+let arrastre = null;
+lienzoBrazo.addEventListener("pointerdown", (e) => {
+  arrastre = { x: e.clientX, y: e.clientY };
+  lienzoBrazo.setPointerCapture(e.pointerId);
+});
+lienzoBrazo.addEventListener("pointermove", (e) => {
+  if (!arrastre) {
+    return;
+  }
+  camara.giro -= (e.clientX - arrastre.x) * 0.4;
+  camara.inclinacion = limitar(camara.inclinacion + (e.clientY - arrastre.y) * 0.3, -5, 89);
+  arrastre = { x: e.clientX, y: e.clientY };
+});
+lienzoBrazo.addEventListener("pointerup", () => { arrastre = null; });
+lienzoBrazo.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  camara.zoom = limitar(camara.zoom * Math.exp(-e.deltaY * 0.001), 0.5, 3);
+}, { passive: false });
+lienzoBrazo.addEventListener("dblclick", () => Object.assign(camara, VISTAS["3d"]));
+document.querySelectorAll("[data-vista]").forEach((boton) =>
+  boton.addEventListener("click", () => Object.assign(camara, VISTAS[boton.dataset.vista])));
+
+let tiempoAnterior = performance.now();
+function animarBrazo(tiempo) {
+  const dt = Math.min((tiempo - tiempoAnterior) / 1000, 0.1);
+  tiempoAnterior = tiempo;
+  dibujarBrazo(dt);
+  actualizarPanel();
+  requestAnimationFrame(animarBrazo);
+}
+requestAnimationFrame(animarBrazo);
+
+/* ---------- Modo demo (interfaz.html?demo) ---------- */
+
+/**
+ * @brief Inventa líneas $T como las de la placa, 25 por segundo, para probar
+ *        la página sin tenerla conectada.
+ */
+if (new URLSearchParams(location.search).has("demo")) {
+  agregarMensaje("Modo demo: los datos son inventados, no vienen de la placa.");
+  const inicio = performance.now();
+  setInterval(() => {
+    const t = (performance.now() - inicio) / 1000;
+    const potes = [
+      2048 + 1500 * Math.sin(0.45 * t),
+      2600 + 700 * Math.sin(0.7 * t + 1),
+      1700 + 900 * Math.sin(0.9 * t),
+      2048 + 2000 * Math.sin(1.1 * t),
+    ].map((p) => Math.round(limitar(p + (Math.random() - 0.5) * 20, 0, 4095)));
+    const pulsos = pulsosDesdePotes(potes).map(Math.round);
+    procesarLinea("$T,0," + potes.join(",") + "," + pulsos.join(",") + ",0");
+  }, 40);
+}
 </script>
 </body>
 </html>
