@@ -28,21 +28,34 @@ Resuelve el problema de manejar un brazo a distancia de forma intuitiva: en vez 
   * Pasar de un modo a otro con una transición de 1 segundo, para que el esclavo no pegue saltos.
   * Calibrar cada articulación con dos puntos (lectura del pote y pulso del servo) y limitar cada servo a un pulso mínimo y máximo, así no pasa de sus topes aunque el pote siga girando.
   * Medir la carga de la garra: el ADC lee por DMA, todo el tiempo, la tensión del servo de la garra después de una resistencia de sensado. Con un tercer botón se toma una referencia con la garra libre, y la carga se calcula contra esa referencia.
-  * Mandar el estado completo a la PC por UART 25 veces por segundo y mostrarlo en una página web, con un gráfico por servo y una animación 3D del brazo.
+  * Mandar el estado completo a la PC por UART 25 veces por segundo y mostrarlo en una página web, con un gráfico por servo, una animación 3D del brazo y la curva de torque contra corriente de la garra.
+  * Recibir comandos desde la PC (cambiar de modo y tomar la referencia de la garra) y contestar cada uno, con el protocolo descrito más abajo. Se mandan con botones de la página o desde cualquier terminal serie.
   * Mostrar el modo con el LED de la placa.
   * Relacionar la corriente del servo de la garra con el torque que hace. Lo caracterizamos con un resorte (ver Ensayos), y la curva sirve para saber cuánta corriente permitir según cuánto se quiera apretar.
-* **En desarrollo para la entrega:**
-  * Protección por sobrecorriente con un comparador y el umbral puesto por el DAC.
-  * Comandos desde la PC hacia la placa.
 * **El sistema NO incluye (Fuera de alcance):**
   * Realimentación de posición de los servos: el esclavo va adonde se le manda, pero no se mide si llegó.
-  * Control de la fuerza de agarre: la garra va por posición. La curva de torque contra corriente deja todo listo para limitarla, pero no está implementado.
+  * Control de la fuerza de agarre: la garra va por posición. La curva de torque contra corriente deja planteado cómo limitarla, pero por indicación del profesor no se implementa en esta entrega.
+  * Protección por sobrecorriente: también quedó como etapa siguiente, por indicación del profesor.
   * Medición de fuerza en tiempo real en newtons: la placa mide la carga en cuentas del ADC (unos 6 mA por cuenta), sin un sensor de fuerza.
   * Guardar las secuencias al apagar: se graban en RAM.
   * Comunicación inalámbrica.
 
+### ✅ Criterios de Aceptación
+
+Son los que planteamos en el TP individual. Dos de ellos se cambiaron con el profesor: el control de fuerza y la protección quedaron como etapas siguientes, y para la garra alcanza con la curva caracterizada.
+
+| # | Criterio | Cómo se verifica | Estado |
+|---|---|---|---|
+| 1 | El brazo esclavo copia los movimientos del maestro en tiempo real. | Se mueve cada articulación del maestro y el esclavo la sigue. En la interfaz se ven el pote y el pulso de cada servo, y la animación del maestro y del esclavo superpuestos. | Cumplido |
+| 2 | La garra mantiene la fuerza pedida sin aplastar objetos blandos. | Se caracterizó el torque de la garra contra la corriente del servo con un resorte (ver Ensayos). Con esa recta se puede elegir la corriente máxima para no aplastar un objeto. | Cambiado con el profesor: curva caracterizada, control no implementado |
+| 3 | Se graba y reproduce una secuencia de al menos 10 s. | Se graba con el botón o el comando `G` y se reproduce con el botón o el comando `R`. Entran hasta 30 s (1500 pasos de 20 ms). | Cumplido |
+| 4 | La protección por sobrecorriente abre la garra. | No aplica en esta entrega. | Cambiado con el profesor: etapa siguiente |
+| 5 | La PC muestra los datos en vivo y la curva corriente-fuerza caracterizada. | `interfaz.html` muestra el modo, los potes, los pulsos y la carga de la garra 25 veces por segundo, la animación 3D y la curva de torque contra corriente. | Cumplido |
+| 6 | La PC controla la placa (comunicación bidireccional), con el protocolo documentado. | Desde la interfaz o una terminal serie se cambia de modo y se toma la referencia, y la placa contesta `OK` o `ERROR`. El protocolo está en la sección 2. | Cumplido |
+
 ### ⏩ Posibles Etapas Siguientes
 
+* Protección por sobrecorriente: un comparador entre la lectura del divisor de la garra y un umbral puesto con el DAC, que por interrupción abra la garra si el servo pide demasiado.
 * Usar la curva de torque contra corriente para controlar la fuerza de agarre: elegir el torque máximo según el objeto, pasarlo a corriente con la recta y que la garra deje de cerrar al llegar a esa corriente. Así se podrían agarrar objetos blandos sin aplastarlos.
 * Pasar el circuito de la protoboard a un PCB con la fuente, los conectores de los servos y la medición de corriente en la misma placa.
 * Guardar varias secuencias en una memoria no volátil (EEPROM o la flash del micro) para que no se pierdan al apagar.
@@ -68,7 +81,7 @@ flowchart LR
     F --> R["R_SENSE 0,33 Ω<br>y divisor"]
     R --> G
     R -- "AD0.5 + DMA" --> LPC
-    LPC -- "UART2 115200" --> PC["PC<br>interfaz.html"]
+    LPC <-->|"UART2 115200<br>estado y comandos"| PC["PC<br>interfaz.html"]
     LPC --> L["LED RGB"]
 ```
 
@@ -108,26 +121,78 @@ flowchart LR
 ```mermaid
 stateDiagram-v2
     [*] --> Copia
-    Copia --> Grabar: botón grabar
-    Grabar --> Copia: botón grabar o memoria llena
-    Copia --> Reproducir: botón reproducir, si hay algo grabado
-    Reproducir --> Copia: botón reproducir
+    Copia --> Grabar: botón grabar o G
+    Grabar --> Copia: botón grabar, C o memoria llena
+    Copia --> Reproducir: botón reproducir o R, si hay algo grabado
+    Reproducir --> Copia: botón reproducir o C
+    Grabar --> Reproducir: R
+    Reproducir --> Grabar: G
 ```
 
 * **Lazo principal:** el SysTick interrumpe cada 20 ms (un período de los servos) y solo cuenta ticks. El `while` del `main` junta lecturas de los potes todo el tiempo, y cada vez que cambia el tick hace un ciclo:
   1. Saca el promedio de cada pote con lo que se juntó en esos 20 ms.
   2. Atiende los botones. Las interrupciones externas solo avisan que hubo un flanco, y el antirrebote se hace por ticks.
-  3. Según el modo, calcula adónde tiene que ir el esclavo: desde el maestro (copia y grabar) o desde la secuencia grabada (reproducir). En grabar, además guarda el paso.
-  4. Mueve los servos, pasando por la transición de 1 s si se acaba de cambiar de modo.
-  5. Actualiza el LED, y cada 2 ticks manda el estado a la PC.
+  3. Atiende el comando de la PC, si llegó alguno. La interrupción de la UART solo junta las letras hasta el fin de línea.
+  4. Según el modo, calcula adónde tiene que ir el esclavo: desde el maestro (copia y grabar) o desde la secuencia grabada (reproducir). En grabar, además guarda el paso.
+  5. Mueve los servos, pasando por la transición de 1 s si se acaba de cambiar de modo.
+  6. Actualiza el LED, y cada 2 ticks manda el estado a la PC.
 
   Mientras tanto, el DMA copia cada conversión del canal 5 (la garra) en un buffer circular de 400 lecturas, sin usar la CPU. Cuando se necesita la carga, se promedia ese buffer.
 
-* **Archivos:** el detalle de cada archivo del firmware está en [`firmware/README.md`](firmware/README.md). La página para la PC está en [`pc/interfaz.html`](pc/interfaz.html): se abre en Chrome o Edge, se conecta al adaptador con Web Serial y lee líneas de este formato:
+* **Archivos:** el detalle de cada archivo del firmware está en [`firmware/README.md`](firmware/README.md). La página para la PC está en [`pc/interfaz.html`](pc/interfaz.html): se abre en Chrome o Edge, se conecta al adaptador con Web Serial, muestra el estado que manda la placa y le manda comandos con el protocolo de abajo. Con `interfaz.html?demo` se puede probar sin la placa.
 
-  ```text
-  $T,modo,pote_base,pote_hombro,pote_codo,pote_garra,pulso_base,pulso_hombro,pulso_codo,pulso_garra,pasos,divisor_garra,carga_garra
-  ```
+### 🔁 Protocolo de Comunicación con la PC
+
+* **Capa física:** UART2 de la LPC (TX en P0.10, RX en P0.11) a un adaptador USB-serie de 3,3 V. 115200 baudios, 8 bits de datos, sin paridad, 1 bit de parada y sin control de flujo.
+* **Formato:** todo es texto ASCII, un mensaje por línea, terminado en `\n`. Así también se puede usar cualquier terminal serie.
+
+**De la placa a la PC.** Cada 40 ms (25 veces por segundo) la placa manda una línea de estado que empieza con `$T`, con 12 números separados por comas:
+
+```text
+$T,modo,pote_base,pote_hombro,pote_codo,pote_garra,pulso_base,pulso_hombro,pulso_codo,pulso_garra,pasos,divisor_garra,carga_garra
+```
+
+| # | Campo | Qué es |
+|---|---|---|
+| 1 | `modo` | 0 copia, 1 grabar, 2 reproducir |
+| 2 a 5 | `pote_*` | Lectura de cada pote del maestro, en cuentas del ADC (0 a 4095) |
+| 6 a 9 | `pulso_*` | Pulso que se le manda a cada servo del esclavo, en µs (544 a 2400) |
+| 10 | `pasos` | Pasos grabados, de 20 ms cada uno (0 a 1500) |
+| 11 | `divisor_garra` | Lectura del divisor de la garra, en cuentas del ADC |
+| 12 | `carga_garra` | Referencia menos lectura, en cuentas (unos 6 mA por cuenta). Da 0 hasta que se toma la referencia |
+
+Por ejemplo, con el brazo derecho, la garra a medio cerrar y sin nada grabado:
+
+```text
+$T,0,2048,2182,2022,500,1472,1472,1472,1472,0,2358,0
+```
+
+Cualquier línea que no empiece con `$T` es un mensaje de texto, y la interfaz la muestra en el cuadro de mensajes: las respuestas a los comandos y `Referencia de la garra: N` cuando se toma la referencia.
+
+**De la PC a la placa.** Cada comando es una letra (mayúscula o minúscula) seguida de `\n` o `\r`. La placa contesta cada uno con una línea:
+
+| Comando | Qué hace | Respuesta |
+|---|---|---|
+| `C` | Vuelve a modo copia. Sirve para dejar de grabar o de reproducir | `OK C` |
+| `G` | Empieza a grabar, borrando lo que había | `OK G` |
+| `R` | Reproduce lo grabado | `OK R`, o `ERROR R: no hay nada grabado` |
+| `T` | Toma la referencia de la garra, igual que el botón de P2.13 | `OK T` y `Referencia de la garra: N` |
+| otro | Nada | `ERROR: comando desconocido` |
+
+Las letras llegan por la interrupción de recepción de la UART2, que las junta hasta el fin de línea. El comando se ejecuta en el tick siguiente, en el mismo lugar donde se atienden los botones, así que nunca cambia el modo a mitad de un ciclo. Si llega otro comando antes de que se atienda el anterior, se descarta.
+
+Ejemplo, escribiendo en una terminal serie (`>` es lo que se manda y `<` lo que contesta la placa):
+
+```text
+> R
+< ERROR R: no hay nada grabado
+> G
+< OK G
+> R
+< OK R
+> C
+< OK C
+```
 
 ---
 
@@ -153,11 +218,10 @@ stateDiagram-v2
   * **GPDMA:** canal 0, del ADC a la memoria, con una lista enlazada que apunta a sí misma para que el buffer de la garra se llene sin parar.
   * **PWM1:** 4 salidas de un solo flanco a 50 Hz, con pulsos de 1 µs de resolución.
   * **SysTick:** el tick de 20 ms del lazo principal.
-  * **NVIC:** EINT1, EINT2 y EINT3 por flanco de bajada para los botones.
-  * **UART2:** 115200 8N1 con FIFO.
+  * **NVIC:** EINT1, EINT2 y EINT3 por flanco de bajada para los botones, y la recepción de la UART2.
+  * **UART2:** 115200 8N1 con FIFO. Transmite esperando a que salga cada línea y recibe por interrupción.
   * **GPIO:** para el LED.
-  * **DAC:** se va a usar para el umbral de la protección por sobrecorriente.
-* **Estrategia de Concurrencia:** *bare-metal*, sin RTOS. Hay un lazo principal cooperativo con una máquina de estados (los modos) que se ejecuta una vez por tick del SysTick. Las interrupciones son cortas: el SysTick solo cuenta, y los EINT solo levantan un aviso que se atiende en el siguiente ciclo. La adquisición de la corriente de la garra la hace el DMA en segundo plano.
+* **Estrategia de Concurrencia:** *bare-metal*, sin RTOS. Hay un lazo principal cooperativo con una máquina de estados (los modos) que se ejecuta una vez por tick del SysTick. Las interrupciones son cortas: el SysTick solo cuenta, los EINT solo levantan un aviso y la UART solo junta las letras del comando, y todo eso se atiende en el siguiente ciclo. La adquisición de la corriente de la garra la hace el DMA en segundo plano.
 
 ---
 
@@ -171,7 +235,7 @@ stateDiagram-v2
 * **Etapa 6 (Medición de la garra):** circuito de R_SENSE y divisor aprobado por el profesor, lectura por DMA del AD0.5 y botón de referencia por EINT3.
 * **Etapa 7 (Calibración):** con los dos brazos armados, un sketch de Arduino que hace que cada servo copie a su pote, para medir la lectura de cada pote en las posiciones clave y pasar esos valores a `config.h`.
 * **Etapa 8 (Caracterización de la garra):** con un resorte enganchado en las pinzas, medimos cuánto se estira y cuánta corriente pide el servo al ir abriendo la garra, y con eso armamos la curva de torque contra corriente.
-* **Próximas:** protección por sobrecorriente.
+* **Etapa 9 (Comunicación bidireccional):** recepción por interrupción en la UART2, comandos de una letra para cambiar de modo y tomar la referencia, y botones en la interfaz para mandarlos. También se sumó a la interfaz la curva de torque contra corriente.
 
 ---
 
