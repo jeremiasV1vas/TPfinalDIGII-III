@@ -1,8 +1,9 @@
-# [Nombre del Proyecto / Sistema]
-> **Asignatura:** Electrónica Digital [II / III] - Universidad Nacional de Córdoba
-> **Integrantes:** > * Nombre Apellido
-> * Nombre Apellido
-> **Profesor:** [Nombre del Profesor]
+# ARM (Brazo) Cortex M3
+> **Asignatura:** Electrónica Digital III - Universidad Nacional de Córdoba
+> **Integrantes:** > * Biancucci, Thiago
+> * Rivera, Alex Joel
+> * Vivas, Jeremías
+> **Profesor:** Blasco
 
 ---
 
