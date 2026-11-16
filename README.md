@@ -30,18 +30,20 @@ Resuelve el problema de manejar un brazo a distancia de forma intuitiva: en vez 
   * Medir la carga de la garra: el ADC lee por DMA, todo el tiempo, la tensión del servo de la garra después de una resistencia de sensado. Con un tercer botón se toma una referencia con la garra libre, y la carga se calcula contra esa referencia.
   * Mandar el estado completo a la PC por UART 25 veces por segundo y mostrarlo en una página web, con un gráfico por servo y una animación 3D del brazo.
   * Mostrar el modo con el LED de la placa.
+  * Relacionar la corriente del servo de la garra con el torque que hace. Lo caracterizamos con un resorte (ver Ensayos), y la curva sirve para saber cuánta corriente permitir según cuánto se quiera apretar.
 * **En desarrollo para la entrega:**
-  * Lazo de control (PI) de la fuerza de agarre de la garra, usando la carga medida.
   * Protección por sobrecorriente con un comparador y el umbral puesto por el DAC.
   * Comandos desde la PC hacia la placa.
 * **El sistema NO incluye (Fuera de alcance):**
   * Realimentación de posición de los servos: el esclavo va adonde se le manda, pero no se mide si llegó.
-  * Medición de fuerza en newtons: la carga se mide en cuentas del ADC (unos 6 mA por cuenta), sin un sensor de fuerza.
+  * Control de la fuerza de agarre: la garra va por posición. La curva de torque contra corriente deja todo listo para limitarla, pero no está implementado.
+  * Medición de fuerza en tiempo real en newtons: la placa mide la carga en cuentas del ADC (unos 6 mA por cuenta), sin un sensor de fuerza.
   * Guardar las secuencias al apagar: se graban en RAM.
   * Comunicación inalámbrica.
 
 ### ⏩ Posibles Etapas Siguientes
 
+* Usar la curva de torque contra corriente para controlar la fuerza de agarre: elegir el torque máximo según el objeto, pasarlo a corriente con la recta y que la garra deje de cerrar al llegar a esa corriente. Así se podrían agarrar objetos blandos sin aplastarlos.
 * Pasar el circuito de la protoboard a un PCB con la fuente, los conectores de los servos y la medición de corriente en la misma placa.
 * Guardar varias secuencias en una memoria no volátil (EEPROM o la flash del micro) para que no se pierdan al apagar.
 * Usar servos con realimentación de posición, o encoders, para cerrar el lazo de posición de cada articulación.
@@ -168,7 +170,8 @@ stateDiagram-v2
 * **Etapa 5 (Mecánica):** impresión 3D de los dos brazos. Para el maestro rediseñamos las piezas con las medidas reales de los potes, con una pieza de prueba para elegir el agujero del eje. Después armamos los dos brazos y medimos el rango de cada articulación.
 * **Etapa 6 (Medición de la garra):** circuito de R_SENSE y divisor aprobado por el profesor, lectura por DMA del AD0.5 y botón de referencia por EINT3.
 * **Etapa 7 (Calibración):** con los dos brazos armados, un sketch de Arduino que hace que cada servo copie a su pote, para medir la lectura de cada pote en las posiciones clave y pasar esos valores a `config.h`.
-* **Próximas:** lazo de control de la fuerza de la garra y protección por sobrecorriente.
+* **Etapa 8 (Caracterización de la garra):** con un resorte enganchado en las pinzas, medimos cuánto se estira y cuánta corriente pide el servo al ir abriendo la garra, y con eso armamos la curva de torque contra corriente.
+* **Próximas:** protección por sobrecorriente.
 
 ---
 
@@ -181,7 +184,19 @@ stateDiagram-v2
   * **Ajuste del eje del pote:** con la pieza de prueba, el agujero de 6,0 mm entra justo y el de 6,2 mm queda casi suelto. Se eligió 6,0 mm.
   * **UART:** con el puente entre TX y RX y una terminal serie se revisó el cableado, y después la interfaz recibió las líneas de estado de la placa a 115200.
   * **Fuente de los servos:** 5,11 V en vacío y unos 4,75 V forzando la garra. Esa caída es la razón por la que la carga de la garra se mide contra una referencia y no con la lectura sola.
+  * **Torque de la garra contra corriente:** enganchamos un resorte (k = 41,3 N/m) entre las pinzas, a 40 mm del tornillo de cada una, y fuimos abriendo la garra. En cada punto medimos el largo del resorte con el calibre y la corriente del servo con el tester. La fuerza del resorte es k × estiramiento, y el torque en cada pinza es esa fuerza por los 40 mm:
+
+    | Largo del resorte | Estiramiento | Fuerza | Torque | Corriente |
+    |---|---|---|---|---|
+    | 17,8 mm (reposo) | 0 mm | 0 N | 0 N·mm | 60 mA |
+    | 21,8 mm | 4,0 mm | 0,165 N | 6,6 N·mm | 250 mA |
+    | 23,0 mm | 5,2 mm | 0,215 N | 8,6 N·mm | 380 mA |
+
+    La recta que mejor ajusta es **τ ≈ 27,4 × (I − 0,045)**, con τ en N·mm e I en A (R² = 0,96): por debajo de unos 45 mA el servo no hace torque, y desde ahí cada 100 mA más son unos 2,7 N·mm en cada pinza. Es poco al lado de los 2,2 kgf·cm (unos 216 N·mm) que da el MG90S, así que seguramente buena parte de la corriente se va en el rozamiento del mecanismo de la garra. Aunque no está implementado, con esta recta se puede elegir un torque máximo para un objeto blando y saber hasta qué corriente dejar apretar al servo.
 * **Evidencia Fotográfica y Gráficos:**
+  * *Torque de la garra contra corriente:*
+
+    ![Torque de la garra contra corriente](docs/curva_torque_corriente.png)
   * *Capturas de instrumental:* `![Interfaz con datos de la placa](docs/captura_interfaz.png)`
   * *Foto del Prototipo Real:* `![Brazos maestro y esclavo](docs/foto_brazos.jpg)`
 
