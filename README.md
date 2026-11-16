@@ -34,22 +34,22 @@ Resuelve el problema de manejar un brazo a distancia de forma intuitiva: en vez 
   * Relacionar la corriente del servo de la garra con el torque que hace. Lo caracterizamos con un resorte (ver Ensayos), y la curva sirve para saber cuánta corriente permitir según cuánto se quiera apretar.
 * **El sistema NO incluye (Fuera de alcance):**
   * Realimentación de posición de los servos: el esclavo va adonde se le manda, pero no se mide si llegó.
-  * Control de la fuerza de agarre: la garra va por posición. La curva de torque contra corriente deja planteado cómo limitarla, pero por indicación del profesor no se implementa en esta entrega.
-  * Protección por sobrecorriente: también quedó como etapa siguiente, por indicación del profesor.
+  * Control de la fuerza de agarre: la garra va por posición. La curva de torque contra corriente deja planteado cómo limitarla, pero no se implementa en esta entrega.
+  * Protección por sobrecorriente: quedó como etapa siguiente.
   * Medición de fuerza en tiempo real en newtons: la placa mide la carga en cuentas del ADC (unos 6 mA por cuenta), sin un sensor de fuerza.
   * Guardar las secuencias al apagar: se graban en RAM.
   * Comunicación inalámbrica.
 
 ### ✅ Criterios de Aceptación
 
-Son los que planteamos en el TP individual. Dos de ellos se cambiaron con el profesor: el control de fuerza y la protección quedaron como etapas siguientes, y para la garra alcanza con la curva caracterizada.
+Son los que planteamos en el TP individual. El control de fuerza y la protección quedaron como etapas siguientes; para la garra, en esta entrega se caracterizó la curva de torque contra corriente.
 
 | # | Criterio | Cómo se verifica | Estado |
 |---|---|---|---|
 | 1 | El brazo esclavo copia los movimientos del maestro en tiempo real. | Se mueve cada articulación del maestro y el esclavo la sigue. En la interfaz se ven el pote y el pulso de cada servo, y la animación del maestro y del esclavo superpuestos. | Cumplido |
-| 2 | La garra mantiene la fuerza pedida sin aplastar objetos blandos. | Se caracterizó el torque de la garra contra la corriente del servo con un resorte (ver Ensayos). Con esa recta se puede elegir la corriente máxima para no aplastar un objeto. | Cambiado con el profesor: curva caracterizada, control no implementado |
+| 2 | La garra mantiene la fuerza pedida sin aplastar objetos blandos. | Se caracterizó el torque de la garra contra la corriente del servo con un resorte (ver Ensayos). Con esa recta se puede elegir la corriente máxima para no aplastar un objeto. | Curva caracterizada, control como etapa siguiente |
 | 3 | Se graba y reproduce una secuencia de al menos 10 s. | Se graba con el botón o el comando `G` y se reproduce con el botón o el comando `R`. Entran hasta 30 s (1500 pasos de 20 ms). | Cumplido |
-| 4 | La protección por sobrecorriente abre la garra. | No aplica en esta entrega. | Cambiado con el profesor: etapa siguiente |
+| 4 | La protección por sobrecorriente abre la garra. | No aplica en esta entrega. | Etapa siguiente |
 | 5 | La PC muestra los datos en vivo y la curva corriente-fuerza caracterizada. | `interfaz.html` muestra el modo, los potes, los pulsos y la carga de la garra 25 veces por segundo, la animación 3D y la curva de torque contra corriente. | Cumplido |
 | 6 | La PC controla la placa (comunicación bidireccional), con el protocolo documentado. | Desde la interfaz o una terminal serie se cambia de modo y se toma la referencia, y la placa contesta `OK` o `ERROR`. El protocolo está en la sección 2. | Cumplido |
 
@@ -232,7 +232,7 @@ Ejemplo, escribiendo en una terminal serie (`>` es lo que se manda y `<` lo que 
 * **Etapa 3 (Integración lógica):** modos de copia, grabar y reproducir con los botones por EINT1 y EINT2, transición de 1 s entre modos y LED de color según el modo.
 * **Etapa 4 (Comunicación):** UART2 transmitiendo el estado. Primero se probó con un puente entre TX y RX (*loopback*) y una terminal serie, y después con la página `interfaz.html`, a la que se le sumó la animación 3D del brazo.
 * **Etapa 5 (Mecánica):** impresión 3D de los dos brazos. Para el maestro rediseñamos las piezas con las medidas reales de los potes, con una pieza de prueba para elegir el agujero del eje. Después armamos los dos brazos y medimos el rango de cada articulación.
-* **Etapa 6 (Medición de la garra):** circuito de R_SENSE y divisor aprobado por el profesor, lectura por DMA del AD0.5 y botón de referencia por EINT3.
+* **Etapa 6 (Medición de la garra):** circuito de R_SENSE y divisor, lectura por DMA del AD0.5 y botón de referencia por EINT3.
 * **Etapa 7 (Calibración):** con los dos brazos armados, un sketch de Arduino que hace que cada servo copie a su pote, para medir la lectura de cada pote en las posiciones clave y pasar esos valores a `config.h`.
 * **Etapa 8 (Caracterización de la garra):** con un resorte enganchado en las pinzas, medimos cuánto se estira y cuánta corriente pide el servo al ir abriendo la garra, y con eso armamos la curva de torque contra corriente.
 * **Etapa 9 (Comunicación bidireccional):** recepción por interrupción en la UART2, comandos de una letra para cambiar de modo y tomar la referencia, y botones en la interfaz para mandarlos. También se sumó a la interfaz la curva de torque contra corriente.
