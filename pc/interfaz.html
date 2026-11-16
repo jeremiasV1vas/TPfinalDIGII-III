@@ -9,6 +9,11 @@
 
     $T,modo,pote_base,pote_hombro,pote_codo,pote_garra,pulso_base,pulso_hombro,pulso_codo,pulso_garra,pasos,divisor_garra,carga_garra
 
+  Con los botones de "Control" se le mandan comandos a la placa, una letra por
+  línea: C (copia), G (grabar), R (reproducir) y T (referencia de la garra).
+  La placa contesta cada uno con una línea OK o ERROR, que aparece abajo en los
+  mensajes.
+
   Arriba se muestra la carga de la garra: cuánto bajó la lectura del divisor
   respecto de la referencia que se toma con el botón de P2.13 (unos 6 mA por
   cuenta). Mientras no se tome la referencia, la carga queda en 0.
@@ -116,6 +121,15 @@
   @media (max-width: 400px) {
     .graficos { grid-template-columns: 1fr; }
   }
+  .control {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .control h2 { font-size: 16px; margin: 0 8px 0 0; }
+  button:disabled { opacity: 0.45; cursor: default; }
 
   /* ---------- Animación del brazo ---------- */
   .brazo {
@@ -168,6 +182,14 @@
   <span class="dato"><b id="conexion" class="desconectado">Desconectado</b></span>
   <button id="boton-conectar">Conectar</button>
 </header>
+
+<div class="tarjeta control">
+  <h2>Control</h2>
+  <button data-comando="C" disabled>Copia</button>
+  <button data-comando="G" disabled>Grabar</button>
+  <button data-comando="R" disabled>Reproducir</button>
+  <button data-comando="T" disabled>Referencia garra</button>
+</div>
 
 <div class="tarjeta brazo">
   <div>
@@ -227,6 +249,9 @@ let lector = null;
 
 /** Último estado que llegó: {pulsos, potes}, o null si todavía no llegó nada. */
 let ultimoEstado = null;
+
+/** true si se abrió con ?demo: los datos son inventados y los comandos se simulan. */
+const modoDemo = new URLSearchParams(location.search).has("demo");
 
 /* ---------- Armado de las tarjetas ---------- */
 
@@ -357,6 +382,33 @@ async function conectar() {
   mostrarConexion(false);
 }
 
+/**
+ * @brief Manda un comando a la placa: una letra y el fin de línea.
+ * @param letra C, G, R o T.
+ */
+async function enviarComando(letra) {
+  agregarMensaje("> " + letra);
+
+  if (modoDemo) {
+    responderDemo(letra);
+    return;
+  }
+  if (!puerto || !puerto.writable) {
+    return;
+  }
+
+  const escritor = puerto.writable.getWriter();
+  try {
+    await escritor.write(new TextEncoder().encode(letra + "\n"));
+  } catch (error) {
+    agregarMensaje("No se pudo mandar el comando: " + error.message);
+  }
+  escritor.releaseLock();
+}
+
+document.querySelectorAll("[data-comando]").forEach((boton) =>
+  boton.addEventListener("click", () => enviarComando(boton.dataset.comando)));
+
 /** @brief Corta la lectura; conectar() se encarga de cerrar el puerto. */
 async function desconectar() {
   if (lector) {
@@ -374,6 +426,9 @@ function mostrarConexion(conectado) {
   estado.className = conectado ? "conectado" : "desconectado";
   document.getElementById("boton-conectar").textContent =
     conectado ? "Desconectar" : "Conectar";
+  document.querySelectorAll("[data-comando]").forEach((boton) => {
+    boton.disabled = !conectado && !modoDemo;
+  });
 }
 
 document.getElementById("boton-conectar").addEventListener("click", () => {
@@ -904,7 +959,37 @@ requestAnimationFrame(animarBrazo);
  * @brief Inventa líneas $T como las de la placa, 25 por segundo, para probar
  *        la página sin tenerla conectada.
  */
-if (new URLSearchParams(location.search).has("demo")) {
+/** Modo y pasos grabados que se inventan en el demo. */
+let modoInventado = 0;
+let pasosInventados = 0;
+
+/**
+ * @brief Contesta un comando como lo haría la placa, para el demo.
+ * @param letra C, G, R o T.
+ */
+function responderDemo(letra) {
+  if (letra === "C") {
+    modoInventado = 0;
+    procesarLinea("OK C");
+  } else if (letra === "G") {
+    modoInventado = 1;
+    pasosInventados = 0;
+    procesarLinea("OK G");
+  } else if (letra === "R") {
+    if (pasosInventados === 0) {
+      procesarLinea("ERROR R: no hay nada grabado");
+    } else {
+      modoInventado = 2;
+      procesarLinea("OK R");
+    }
+  } else if (letra === "T") {
+    procesarLinea("OK T");
+    procesarLinea("Referencia de la garra: 2480");
+  }
+}
+
+if (modoDemo) {
+  mostrarConexion(false);
   agregarMensaje("Modo demo: los datos son inventados, no vienen de la placa.");
   const inicio = performance.now();
   setInterval(() => {
@@ -916,7 +1001,11 @@ if (new URLSearchParams(location.search).has("demo")) {
       2048 + 2000 * Math.sin(1.1 * t),
     ].map((p) => Math.round(limitar(p + (Math.random() - 0.5) * 20, 0, 4095)));
     const pulsos = pulsosDesdePotes(potes).map(Math.round);
-    procesarLinea("$T,0," + potes.join(",") + "," + pulsos.join(",") + ",0,2480,0");
+    if (modoInventado === 1) {
+      pasosInventados = Math.min(pasosInventados + 2, 1500);
+    }
+    procesarLinea("$T," + modoInventado + "," + potes.join(",") + "," + pulsos.join(",") +
+      "," + pasosInventados + ",2480,0");
   }, 40);
 }
 </script>

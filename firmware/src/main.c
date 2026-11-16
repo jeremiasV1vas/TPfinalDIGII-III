@@ -20,7 +20,8 @@
  * Se aprieta una vez al arrancar, con la garra abierta y sin agarrar nada.
  *
  * Cada TELEMETRIA_CADA ticks se manda el estado a la PC por la UART, para
- * verlo en pc/interfaz.html.
+ * verlo en pc/interfaz.html. Desde la PC también se puede cambiar de modo y
+ * tomar la referencia, con comandos de una letra (ver atender_comandos()).
  */
 
 #include <stdio.h>
@@ -297,6 +298,63 @@ static void atender_botones(void) {
  * ------------------------------------------------------------------------- */
 
 /**
+ * @brief Atiende un comando de la PC, si llegó alguno.
+ *
+ * Cada comando es una letra, en mayúscula o minúscula:
+ * - C: vuelve a modo copia (sirve para dejar de grabar o de reproducir).
+ * - G: empieza a grabar, borrando lo que había.
+ * - R: reproduce lo grabado.
+ * - T: toma la referencia de la garra, igual que el botón de P2.13.
+ *
+ * La placa contesta cada comando con una línea que empieza con OK o con ERROR.
+ */
+static void atender_comandos(void) {
+    char comando[COMANDO_LARGO_MAX + 1];
+
+    if (!serie_recibir(comando)) {
+        return;
+    }
+
+    char letra = comando[0];
+    if (letra >= 'a' && letra <= 'z') {
+        letra = letra - 'a' + 'A';
+    }
+    // Más de una letra no es ningún comando
+    if (comando[1] != '\0') {
+        letra = '?';
+    }
+
+    switch (letra) {
+        case 'C':
+            cambiar_modo(MODO_COPIA);
+            serie_enviar("OK C\n");
+            break;
+
+        case 'G':
+            cambiar_modo(MODO_GRABAR);
+            serie_enviar("OK G\n");
+            break;
+
+        case 'R':
+            if (cambiar_modo(MODO_REPRODUCIR)) {
+                serie_enviar("OK R\n");
+            } else {
+                serie_enviar("ERROR R: no hay nada grabado\n");
+            }
+            break;
+
+        case 'T':
+            serie_enviar("OK T\n");
+            tomar_referencia();
+            break;
+
+        default:
+            serie_enviar("ERROR: comando desconocido\n");
+            break;
+    }
+}
+
+/**
  * @brief Manda el estado a la PC en una línea:
  *
  * $T,modo,pote_base,pote_hombro,pote_codo,pote_garra,
@@ -328,6 +386,7 @@ static void enviar_estado(void) {
 static void ciclo(void) {
     sensores_promediar();
     atender_botones();
+    atender_comandos();
 
     paso_t objetivo;
 
