@@ -1,10 +1,11 @@
 /**
  * @file garra.h
- * @brief Garra del esclavo y su lectura de carga.
+ * @brief Garra del esclavo, su lectura de carga y el PID de fuerza.
  *
  * La palanca del maestro da un "cierre" de 0 (suelta) a 1000 (apretada a fondo).
- * Por ahora el cierre va directo a la posición de la garra. Más adelante acá
- * se suma el PID de fuerza.
+ * Mientras no se tome la referencia, el cierre va directo a la posición de la
+ * garra. Con la referencia tomada, el cierre pide una carga y el PID ajusta
+ * cuánto cierra la garra para llegar a esa carga (ver garra.c).
  *
  * La carga sale del divisor 3,3k/2,2k que mide la tensión del servo de la garra
  * después de R_SENSE (3 resistencias de 1 Ω en paralelo, 0,33 Ω). Cuando la
@@ -40,7 +41,8 @@ void garra_actualizar(uint16_t cierre);
 /**
  * @brief Guarda la lectura actual del divisor como referencia.
  *
- * Hay que llamarla con la garra libre, sin agarrar nada y sin forzar.
+ * Hay que llamarla con la garra libre, sin agarrar nada y sin forzar. Desde
+ * ahí la garra pasa a control de fuerza, y el control arranca de cero.
  */
 void garra_tomar_referencia(void);
 
@@ -61,5 +63,12 @@ uint16_t garra_referencia(void);
  * todavía no se tomó la referencia.
  */
 int32_t garra_carga(void);
+
+/**
+ * @brief Carga que pide la palanca del maestro, para compararla con la medida.
+ *
+ * @return Cuentas del ADC, o 0 si la palanca está suelta o no hay referencia.
+ */
+int32_t garra_carga_pedida(void);
 
 #endif

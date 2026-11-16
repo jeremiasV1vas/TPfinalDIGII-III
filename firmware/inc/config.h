@@ -106,6 +106,28 @@
 /** @} */
 
 /**
+ * @name Control de fuerza de la garra
+ * Con la referencia tomada, la palanca del maestro ya no pide una posición
+ * sino una carga, en cuentas del ADC (unos 6 mA por cuenta): apenas apretada
+ * pide CARGA_CONTACTO y a fondo pide CARGA_MAX. La garra primero se cierra de
+ * a poco hasta que la carga pasa CARGA_CONTACTO (tocó el objeto), y después
+ * el PID ajusta cuánto cierra para llegar a la carga pedida. Ver garra.c.
+ *
+ * CARGA_CONTACTO tiene que quedar por encima de lo que marca la carga con la
+ * garra cerrándose en el aire (moverse también consume), y por debajo de lo
+ * que marca apretando algo. Se ajusta mirando "Carga garra" en la interfaz.
+ * Las ganancias salen de una simulación y hay que ajustarlas en la placa.
+ * @{
+ */
+#define CARGA_MAX          80   ///< Carga pedida con la palanca a fondo (unos 480 mA).
+#define CARGA_CONTACTO     30   ///< Carga a partir de la cual se toma que tocó el objeto (unos 180 mA).
+#define VELOCIDAD_BUSQUEDA 10   ///< Cuánto se cierra por tick mientras busca el objeto (de 0 a 1000 en 2 s).
+#define PID_KP             0.2f ///< Cierre (de 0 a 1000) por cada cuenta de error.
+#define PID_KI             5.0f ///< Cierre por cada cuenta de error acumulada durante un segundo.
+#define PID_KD             0.0f ///< La derivada queda en 0: con el ruido de la medición no ayudaba.
+/** @} */
+
+/**
  * @name Pines de los botones
  * Pulsadores a masa con el pull-up interno. No usamos el EINT0 (P2.10) porque
  * si ese pin está en 0 cuando arranca la placa, entra al modo de grabación

@@ -7,11 +7,12 @@
   Con "Conectar" se elige el adaptador USB a serie y se leen las líneas de estado
   que manda la placa cada 2 ticks (25 por segundo):
 
-    $T,modo,pote_base,pote_hombro,pote_codo,pote_garra,pulso_base,pulso_hombro,pulso_codo,pulso_garra,pasos,divisor_garra,carga_garra
+    $T,modo,pote_base,pote_hombro,pote_codo,pote_garra,pulso_base,pulso_hombro,pulso_codo,pulso_garra,pasos,divisor_garra,carga_garra,carga_pedida
 
   Arriba se muestra la carga de la garra: cuánto bajó la lectura del divisor
   respecto de la referencia que se toma con el botón de P2.13 (unos 6 mA por
-  cuenta). Mientras no se tome la referencia, la carga queda en 0.
+  cuenta). Mientras no se tome la referencia, la carga queda en 0. Al lado va
+  la carga que pide la palanca, que es a la que el PID quiere llegar.
 
   Hay un gráfico por servo con los últimos 10 segundos: el pulso que se le manda
   al servo (en µs) y el pote del maestro (en cuentas del ADC).
@@ -165,6 +166,7 @@
   <span class="dato">Pasos grabados: <b id="pasos">-</b></span>
   <span class="dato">Divisor garra: <b id="divisor">-</b></span>
   <span class="dato">Carga garra: <b id="carga">-</b></span>
+  <span class="dato">Carga pedida: <b id="pedida">-</b></span>
   <span class="dato"><b id="conexion" class="desconectado">Desconectado</b></span>
   <button id="boton-conectar">Conectar</button>
 </header>
@@ -203,7 +205,7 @@ const MODOS = ["Copia", "Grabar", "Reproducir", "Manual"];
 const SERVOS = ["Base", "Hombro", "Codo", "Garra"];
 
 /** Cuántos números trae una línea $T. */
-const CANTIDAD_CAMPOS = 12;
+const CANTIDAD_CAMPOS = 13;
 
 /** Cuántas muestras entran en el gráfico: 10 s a 25 líneas por segundo. */
 const MUESTRAS_GRAFICO = 250;
@@ -278,11 +280,13 @@ function procesarLinea(linea) {
   const pasos = numeros[9];
   const divisor = numeros[10];
   const carga = numeros[11];
+  const pedida = numeros[12];
 
   document.getElementById("modo").textContent = MODOS[modo] ?? modo;
   document.getElementById("pasos").textContent = pasos;
   document.getElementById("divisor").textContent = divisor;
   document.getElementById("carga").textContent = carga;
+  document.getElementById("pedida").textContent = pedida;
 
   for (let i = 0; i < SERVOS.length; i++) {
     historial[i].push({ pulso: pulsos[i], pote: potes[i] });
@@ -916,7 +920,7 @@ if (new URLSearchParams(location.search).has("demo")) {
       2048 + 2000 * Math.sin(1.1 * t),
     ].map((p) => Math.round(limitar(p + (Math.random() - 0.5) * 20, 0, 4095)));
     const pulsos = pulsosDesdePotes(potes).map(Math.round);
-    procesarLinea("$T,0," + potes.join(",") + "," + pulsos.join(",") + ",0,2480,0");
+    procesarLinea("$T,0," + potes.join(",") + "," + pulsos.join(",") + ",0,2480,0,0");
   }, 40);
 }
 </script>

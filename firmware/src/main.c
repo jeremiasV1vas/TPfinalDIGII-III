@@ -18,6 +18,8 @@
  * El tercer botón (P2.13) guarda la referencia de la garra: la lectura del
  * divisor con la garra libre, contra la que después se mide cuánto aprieta.
  * Se aprieta una vez al arrancar, con la garra abierta y sin agarrar nada.
+ * Desde ahí la palanca del maestro pide una fuerza y no una posición, y la
+ * garra la sigue con un PID (ver garra.c).
  *
  * Cada TELEMETRIA_CADA ticks se manda el estado a la PC por la UART, para
  * verlo en pc/interfaz.html.
@@ -301,19 +303,19 @@ static void atender_botones(void) {
  *
  * $T,modo,pote_base,pote_hombro,pote_codo,pote_garra,
  * pulso_base,pulso_hombro,pulso_codo,pulso_garra,pasos_grabados,
- * divisor_garra,carga_garra
+ * divisor_garra,carga_garra,carga_pedida
  */
 static void enviar_estado(void) {
     char texto[96];
 
-    sprintf(texto, "$T,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n",
+    sprintf(texto, "$T,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n",
             (int)modo,
             (int)sensores_pote(POTE_BASE), (int)sensores_pote(POTE_HOMBRO),
             (int)sensores_pote(POTE_CODO), (int)sensores_pote(POTE_GARRA),
             (int)servo_get_us(SERVO_BASE), (int)servo_get_us(SERVO_HOMBRO),
             (int)servo_get_us(SERVO_CODO), (int)servo_get_us(SERVO_GARRA),
             (int)secuencia_largo(),
-            (int)sensores_corriente(), (int)garra_carga());
+            (int)sensores_corriente(), (int)garra_carga(), (int)garra_carga_pedida());
 
     serie_enviar(texto);
 }

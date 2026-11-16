@@ -14,7 +14,7 @@ firmware/
 | `main.c` | Modos, LED y lo que se hace en cada tick (20 ms) |
 | `servos.c` | PWM1 para los 4 servos del esclavo (P2.0 a P2.3) |
 | `sensores.c` | ADC en modo burst para los potes y DMA para la corriente de la garra |
-| `garra.c` | Garra del esclavo (por ahora, por posición) y su carga medida con el divisor |
+| `garra.c` | Garra del esclavo: carga medida con el divisor y PID de fuerza |
 | `botones.c` | Botones de grabar (EINT1, P2.11), reproducir (EINT2, P2.12) y referencia de la garra (EINT3, P2.13) |
 | `secuencia.c` | Pasos grabados en RAM, hasta 30 segundos |
 | `serie.c` | UART2 a 115200 (P0.10 y P0.11) para mandar el estado a la PC |
@@ -42,6 +42,20 @@ La lectura también se mueve con la fuente de 5 V, así que no sirve sola: hay q
 3. Desde ahí, la *carga* que se ve arriba en la interfaz es referencia − lectura. Con la garra libre da cerca de 0, y al apretar algo sube (unos 6 mA por cuenta).
 
 Si se cambia la fuente o se mueve el cableado, conviene volver a tomar la referencia.
+
+## Control de fuerza (PID)
+
+Con la referencia tomada, la palanca del maestro deja de pedir una posición y pasa a pedir una carga: apenas apretada pide `CARGA_CONTACTO` (un agarre suave) y a fondo pide `CARGA_MAX`. La garra trabaja en dos etapas:
+
+1. **Buscar:** se va cerrando de a poco (`VELOCIDAD_BUSQUEDA`) hasta que la carga pasa `CARGA_CONTACTO` durante 3 ticks seguidos. Ahí tocó el objeto.
+2. **Apretar:** el PID calcula cuánto cerrar más allá del punto de contacto para que la carga medida llegue a la pedida.
+
+Al soltar la palanca la garra se abre, y la próxima vez vuelve a buscar. En la interfaz se ven arriba la *carga* y la *carga pedida*: con el PID andando, la primera tiene que seguir a la segunda.
+
+Para ajustarlo en la placa:
+
+1. Tomar la referencia y cerrar la garra en el aire, sin nada. Anotar cuánto marca la carga mientras se mueve: `CARGA_CONTACTO` tiene que quedar por encima.
+2. Agarrar algo y mirar si la carga llega a la pedida. Si tarda mucho, subir `PID_KI`; si oscila, bajar `PID_KP` y `PID_KI`.
 
 ## Armar el proyecto en MCUXpresso
 
