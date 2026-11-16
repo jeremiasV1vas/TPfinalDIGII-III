@@ -261,8 +261,16 @@ Ejemplo, escribiendo en una terminal serie (`>` es lo que se manda y `<` lo que 
   * *Torque de la garra contra corriente:*
 
     ![Torque de la garra contra corriente](docs/curva_torque_corriente.png)
-  * *Capturas de instrumental:* `![Interfaz con datos de la placa](docs/captura_interfaz.png)`
-  * *Foto del Prototipo Real:* `![Brazos maestro y esclavo](docs/foto_brazos.jpg)`
+  * *El esclavo copiando al maestro:* el brazo verde es el maestro, con los potes, y el rojo es el esclavo, con los servos.
+
+    ![Esclavo copiando al maestro](docs/copia_maestro_esclavo.gif)
+    ![Esclavo copiando al maestro, otra toma](docs/copia_maestro_esclavo_2.gif)
+  * *Interfaz con datos de la placa:* gráficos de pulso y pote de cada servo en tiempo real, y la curva de torque abajo.
+
+    ![Interfaz con los gráficos de cada servo](docs/interfaz_graficos.gif)
+  * *Animación 3D del brazo en la interfaz:*
+
+    ![Animación del brazo en la interfaz](docs/interfaz_animacion.gif)
 
 ---
 
