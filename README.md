@@ -167,7 +167,8 @@ stateDiagram-v2
 * **Etapa 4 (Comunicación):** UART2 transmitiendo el estado. Primero se probó con un puente entre TX y RX (*loopback*) y una terminal serie, y después con la página `interfaz.html`, a la que se le sumó la animación 3D del brazo.
 * **Etapa 5 (Mecánica):** impresión 3D de los dos brazos. Para el maestro rediseñamos las piezas con las medidas reales de los potes, con una pieza de prueba para elegir el agujero del eje. Después armamos los dos brazos y medimos el rango de cada articulación.
 * **Etapa 6 (Medición de la garra):** circuito de R_SENSE y divisor aprobado por el profesor, lectura por DMA del AD0.5 y botón de referencia por EINT3.
-* **Próximas:** calibración fina de cada articulación con los brazos armados, lazo de control de la fuerza de la garra y protección por sobrecorriente.
+* **Etapa 7 (Calibración):** con los dos brazos armados, un sketch de Arduino que hace que cada servo copie a su pote, para medir la lectura de cada pote en las posiciones clave y pasar esos valores a `config.h`.
+* **Próximas:** lazo de control de la fuerza de la garra y protección por sobrecorriente.
 
 ---
 
@@ -176,6 +177,7 @@ stateDiagram-v2
 * **Pruebas Funcionales Realizadas:**
   * **Servos:** cada servo se movió solo, con un Arduino, de 60° a 120° y a ángulos pedidos por el monitor serie, antes de montarlo en el esclavo.
   * **Potes y rango del maestro:** con los brazos armados, cada articulación del maestro recorre de 0° a 180°, con el pote cerca de la mitad (unas 2048 cuentas) con el brazo erguido. Como el pote gira 270° en 4096 cuentas, son unas 15 cuentas por grado: 0° cae cerca de 683 y 180° cerca de 3413.
+  * **Calibración (con el Arduino, de 0 a 1023):** la base usa todo el recorrido del pote y del servo. El hombro marca 545 recto y el codo 505; se tomó el recto como 90° y, con la pendiente del pote, 90° para cada lado. El codo quedó girando al revés que el maestro, y se corrigió invirtiendo su calibración en el código. La palanca de la garra va de 0 (cerrada, servo en 0°) a 250 (abierta, servo en 180°). En la LPC estos valores se multiplican por 4.
   * **Ajuste del eje del pote:** con la pieza de prueba, el agujero de 6,0 mm entra justo y el de 6,2 mm queda casi suelto. Se eligió 6,0 mm.
   * **UART:** con el puente entre TX y RX y una terminal serie se revisó el cableado, y después la interfaz recibió las líneas de estado de la placa a 115200.
   * **Fuente de los servos:** 5,11 V en vacío y unos 4,75 V forzando la garra. Esa caída es la razón por la que la carga de la garra se mide contra una referencia y no con la lectura sola.

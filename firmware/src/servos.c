@@ -9,12 +9,17 @@
 #include "servos.h"
 
 /**
- * Límites de cada servo en µs, para que ninguno choque con la estructura.
- * Por ahora 1000 a 2000 en todos; hay que ajustarlos con el brazo armado.
+ * Límites de cada servo en µs. Con el brazo armado, los cuatro usan todo el
+ * recorrido: 544 µs es 0° y 2400 µs es 180°, igual que en la librería Servo
+ * del Arduino con la que los probamos.
+ *
+ * Si el maestro pide más allá, el servo se queda en el límite.
  * La posición 0 no se usa, así el número de servo sirve directo como índice.
  */
-static const uint32_t pulso_min[5] = {0, 1000, 1000, 1000, 1000};
-static const uint32_t pulso_max[5] = {0, 2000, 2000, 2000, 2000};
+static const uint32_t pulso_min[5] = {0, SERVO_0_GRADOS_US, SERVO_0_GRADOS_US,
+                                      SERVO_0_GRADOS_US, SERVO_0_GRADOS_US};
+static const uint32_t pulso_max[5] = {0, SERVO_180_GRADOS_US, SERVO_180_GRADOS_US,
+                                      SERVO_180_GRADOS_US, SERVO_180_GRADOS_US};
 
 /** Último pulso que se le mandó a cada servo. */
 static uint32_t pulso_actual[5];

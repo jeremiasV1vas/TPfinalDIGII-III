@@ -31,6 +31,16 @@
 /** @} */
 
 /**
+ * @name Recorrido de los servos
+ * Pulsos para 0° y 180°, los mismos que usa la librería Servo del Arduino.
+ * Los MG90S del esclavo usan todo ese recorrido.
+ * @{
+ */
+#define SERVO_0_GRADOS_US   544
+#define SERVO_180_GRADOS_US 2400
+/** @} */
+
+/**
  * @name Canales del ADC
  * Los potes del maestro. El AD0.3 no lo usamos porque comparte pin con la
  * salida del DAC. La corriente de la garra entra por el AD0.5 (P1.31) y ese
@@ -51,26 +61,32 @@
  * Entre A y B se hace una regla de tres, así el maestro no tiene que medir
  * exactamente lo mismo que el esclavo.
  *
- * Mientras no estén calibrados, todo el recorrido del pote va de 1000 a 2000 µs.
+ * Los valores salen de las mediciones del 16/11 con los brazos armados. Se
+ * midieron con un Arduino (0 a 1023), así que acá están multiplicados por 4.
+ * El pote gira 270° en todo su recorrido, o sea unas 15 cuentas por grado.
  * @{
  */
+
+/// Base: todo el recorrido del pote va a todo el recorrido del servo.
 #define CAL_BASE_POTE_A    0
 #define CAL_BASE_POTE_B    4095
-#define CAL_BASE_PULSO_A   1000
-#define CAL_BASE_PULSO_B   2000
+#define CAL_BASE_PULSO_A   SERVO_0_GRADOS_US
+#define CAL_BASE_PULSO_B   SERVO_180_GRADOS_US
 
-#define CAL_HOMBRO_POTE_A  0
-#define CAL_HOMBRO_POTE_B  4095
-#define CAL_HOMBRO_PULSO_A 1000
-#define CAL_HOMBRO_PULSO_B 2000
+/// Hombro: recto marca 2182 (90°), y de ahí 90° para cada lado.
+#define CAL_HOMBRO_POTE_A  817
+#define CAL_HOMBRO_POTE_B  3547
+#define CAL_HOMBRO_PULSO_A SERVO_0_GRADOS_US
+#define CAL_HOMBRO_PULSO_B SERVO_180_GRADOS_US
 
-#define CAL_CODO_POTE_A    0
-#define CAL_CODO_POTE_B    4095
-#define CAL_CODO_PULSO_A   1000
-#define CAL_CODO_PULSO_B   2000
+/// Codo: recto marca 2022 (90°). Gira al revés que el maestro, por eso A va a 180° y B a 0°.
+#define CAL_CODO_POTE_A    657
+#define CAL_CODO_POTE_B    3387
+#define CAL_CODO_PULSO_A   SERVO_180_GRADOS_US
+#define CAL_CODO_PULSO_B   SERVO_0_GRADOS_US
 
-#define CAL_GARRA_POTE_SUELTA   0    ///< Pote de la palanca del maestro sin apretar.
-#define CAL_GARRA_POTE_APRETADA 4095 ///< Pote de la palanca apretada a fondo contra el tope.
+#define CAL_GARRA_POTE_SUELTA   1001 ///< Pote de la palanca del maestro suelta (garra abierta). Más arriba también es abierta.
+#define CAL_GARRA_POTE_APRETADA 0    ///< Pote de la palanca apretada a fondo (garra cerrada).
 /** @} */
 
 /**
@@ -82,11 +98,11 @@
 /**
  * @name Garra del esclavo
  * Pulso con la garra abierta del todo y cerrada del todo (mandíbulas juntas).
- * Se ajustan con el brazo armado.
+ * La garra cierra en 0° y abre en 180°.
  * @{
  */
-#define GARRA_ABIERTA_US 1000
-#define GARRA_CERRADA_US 2000
+#define GARRA_ABIERTA_US SERVO_180_GRADOS_US
+#define GARRA_CERRADA_US SERVO_0_GRADOS_US
 /** @} */
 
 /**
