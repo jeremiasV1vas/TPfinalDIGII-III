@@ -475,17 +475,18 @@ requestAnimationFrame(dibujarTodo);
 /* ---------- Animación del brazo ---------- */
 
 /*
- * Cómo se pasa de pulso a ángulo. Con 1500 µs el servo está en el medio
- * (90°) y entre 1000 y 2000 µs recorre GRADOS_RECORRIDO. Si en el dibujo una
- * articulación gira al revés que en el brazo de verdad, se pone -1 en SENTIDO.
+ * Cómo se pasa de pulso a ángulo. Con 1472 µs el servo está en el medio
+ * (90°) y entre 544 y 2400 µs recorre GRADOS_RECORRIDO, igual que en
+ * config.h. Si en el dibujo una articulación gira al revés que en el brazo de
+ * verdad, se pone -1 en SENTIDO.
  */
-const PULSO_CENTRO = 1500;
+const PULSO_CENTRO = 1472;
 const GRADOS_RECORRIDO = 180;
 const SENTIDO = { base: 1, hombro: 1, codo: 1 };
 
 /** Garra (igual que GARRA_ABIERTA_US y GARRA_CERRADA_US de config.h). */
-const GARRA_ABIERTA_US = 1000;
-const GARRA_CERRADA_US = 2000;
+const GARRA_ABIERTA_US = 2400;
+const GARRA_CERRADA_US = 544;
 
 /** Cuánto se abre cada mandíbula, en grados, con la garra abierta del todo. */
 const APERTURA_MAX = 35;
@@ -498,16 +499,16 @@ const MEDIDAS = { alturaBase: 6, brazo: 9, antebrazo: 8, garra: 3.5 };
  * pulsos y dibujar dónde está el maestro.
  */
 const CALIBRACION = [
-  { poteA: 0, poteB: 4095, pulsoA: 1000, pulsoB: 2000 }, // Base
-  { poteA: 0, poteB: 4095, pulsoA: 1000, pulsoB: 2000 }, // Hombro
-  { poteA: 0, poteB: 4095, pulsoA: 1000, pulsoB: 2000 }, // Codo
+  { poteA: 0, poteB: 4095, pulsoA: 2400, pulsoB: 544 },   // Base (invertida)
+  { poteA: 817, poteB: 3547, pulsoA: 544, pulsoB: 2400 }, // Hombro
+  { poteA: 657, poteB: 3387, pulsoA: 2400, pulsoB: 544 }, // Codo (invertido)
 ];
-const GARRA_POTE_SUELTA = 0;
-const GARRA_POTE_APRETADA = 4095;
+const GARRA_POTE_SUELTA = 1001;
+const GARRA_POTE_APRETADA = 0;
 
 /** Límites de los servos (servos.c). */
-const SERVO_MIN_US = 1000;
-const SERVO_MAX_US = 2000;
+const SERVO_MIN_US = 544;
+const SERVO_MAX_US = 2400;
 
 /** Cuántos segundos de recorrido de la punta se dibujan como estela. */
 const SEGUNDOS_ESTELA = 2.5;
@@ -537,7 +538,7 @@ const radianes = (grados) => grados * Math.PI / 180;
  *         recto y cierre de la garra de 0 (abierta) a 1 (cerrada).
  */
 function poseDesdePulsos(pulsos) {
-  const grados = (pulso) => (pulso - PULSO_CENTRO) * GRADOS_RECORRIDO / 1000;
+  const grados = (pulso) => (pulso - PULSO_CENTRO) * GRADOS_RECORRIDO / (SERVO_MAX_US - SERVO_MIN_US);
   return {
     base: grados(pulsos[0]) * SENTIDO.base,
     hombro: 90 + grados(pulsos[1]) * SENTIDO.hombro,
