@@ -96,8 +96,9 @@
  * (ISP) y no corre el programa.
  * @{
  */
-#define BOTON_GRABAR_PIN     PIN_11 ///< P2.11, EINT1.
-#define BOTON_REPRODUCIR_PIN PIN_12 ///< P2.12, EINT2.
+#define BOTON_GRABAR_PIN     PIN_11 ///< P2.11 (J2-52), EINT1.
+#define BOTON_REPRODUCIR_PIN PIN_12 ///< P2.12 (J2-53), EINT2.
+#define BOTON_REFERENCIA_PIN PIN_13 ///< P2.13 (J2-27), EINT3.
 /** @} */
 
 /**

@@ -3,7 +3,7 @@
  * @brief UART2 a 115200 baudios. Por ahora solo transmite, esperando a que
  * salga cada línea.
  *
- * Una línea de estado tiene unos 50 caracteres, que a 115200 tardan unos 4 ms.
+ * Una línea de estado tiene unos 60 caracteres, que a 115200 tardan unos 5 ms.
  * Como se manda una cada 40 ms, esperar no molesta y no hace falta usar
  * interrupciones ni DMA para transmitir.
  */

@@ -1,11 +1,18 @@
 /**
  * @file garra.c
- * @brief Garra del esclavo por posición.
+ * @brief Garra del esclavo por posición, y su carga medida con el divisor.
  */
 
 #include "config.h"
 #include "garra.h"
+#include "sensores.h"
 #include "servos.h"
+
+/**
+ * Lectura del divisor con la garra libre. Queda en 0 hasta que se aprieta el
+ * botón de referencia.
+ */
+static uint16_t referencia = 0;
 
 /**
  * @brief Pasa un cierre (0 a 1000) a pulso del servo de la garra.
@@ -33,4 +40,22 @@ void garra_init(void) {
 
 void garra_actualizar(uint16_t cierre) {
     mover_garra(cierre_a_pulso(cierre));
+}
+
+void garra_tomar_referencia(void) {
+    // sensores_corriente() ya es el promedio de los últimos 20 ms, o sea de un
+    // período entero del servo
+    referencia = sensores_corriente();
+}
+
+uint16_t garra_referencia(void) {
+    return referencia;
+}
+
+int32_t garra_carga(void) {
+    if (referencia == 0) {
+        return 0;
+    }
+    // Al apretar, la lectura baja, por eso se resta la lectura de la referencia
+    return (int32_t)referencia - (int32_t)sensores_corriente();
 }

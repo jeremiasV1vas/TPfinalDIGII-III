@@ -14,8 +14,8 @@ firmware/
 | `main.c` | Modos, LED y lo que se hace en cada tick (20 ms) |
 | `servos.c` | PWM1 para los 4 servos del esclavo (P2.0 a P2.3) |
 | `sensores.c` | ADC en modo burst para los potes y DMA para la corriente de la garra |
-| `garra.c` | Garra del esclavo (por ahora, por posición) |
-| `botones.c` | Botones de grabar (EINT1, P2.11) y reproducir (EINT2, P2.12) |
+| `garra.c` | Garra del esclavo (por ahora, por posición) y su carga medida con el divisor |
+| `botones.c` | Botones de grabar (EINT1, P2.11), reproducir (EINT2, P2.12) y referencia de la garra (EINT3, P2.13) |
 | `secuencia.c` | Pasos grabados en RAM, hasta 30 segundos |
 | `serie.c` | UART2 a 115200 (P0.10 y P0.11) para mandar el estado a la PC |
 
@@ -30,6 +30,18 @@ Los comentarios están en formato Doxygen.
 | Reproducir | Repite lo grabado una y otra vez | Verde fijo |
 
 Arranca en *Copia*. Con el botón de grabar se entra y se sale de *Grabar*, y con el de reproducir se entra y se sale de *Reproducir*. Los botones van entre el pin y GND, sin resistencia (se usa el pull-up interno).
+
+## Referencia de la garra
+
+El servo de la garra se alimenta a través de R_SENSE (3 resistencias de 1 Ω en paralelo) y un divisor 3,3k/2,2k lleva su tensión al AD0.5 (P1.31, J2-20). Cuando la garra aprieta algo, el servo pide más corriente y esa lectura baja.
+
+La lectura también se mueve con la fuente de 5 V, así que no sirve sola: hay que compararla con una lectura de referencia tomada con la garra libre. Para eso está el tercer botón, en P2.13 (J2-27):
+
+1. Prender la placa y dejar la garra abierta, sin agarrar nada.
+2. Apretar el botón de referencia. En los mensajes de la interfaz aparece `Referencia de la garra: ...` con el valor guardado.
+3. Desde ahí, la *carga* que se ve arriba en la interfaz es referencia − lectura. Con la garra libre da cerca de 0, y al apretar algo sube (unos 6 mA por cuenta).
+
+Si se cambia la fuente o se mueve el cableado, conviene volver a tomar la referencia.
 
 ## Armar el proyecto en MCUXpresso
 
