@@ -479,6 +479,9 @@ requestAnimationFrame(dibujarTodo);
  * (90°) y entre 544 y 2400 µs recorre GRADOS_RECORRIDO, igual que en
  * config.h. Si en el dibujo una articulación gira al revés que en el brazo de
  * verdad, se pone -1 en SENTIDO.
+ *
+ * Con el hombro y el codo en 1472 µs el brazo queda derecho, todo vertical,
+ * igual que el maestro con los dos potes en la posición de recto.
  */
 const PULSO_CENTRO = 1472;
 const GRADOS_RECORRIDO = 180;
@@ -534,8 +537,9 @@ const radianes = (grados) => grados * Math.PI / 180;
 /**
  * @brief Pasa los 4 pulsos (µs) a la pose del brazo.
  * @return {base, hombro, codo, cierre}: base en grados desde el frente,
- *         hombro como elevación del brazo, codo desde la posición en ángulo
- *         recto y cierre de la garra de 0 (abierta) a 1 (cerrada).
+ *         hombro como elevación del brazo (90° es vertical), codo como
+ *         cuánto se dobla respecto del brazo (0° es derecho) y cierre de la
+ *         garra de 0 (abierta) a 1 (cerrada).
  */
 function poseDesdePulsos(pulsos) {
   const grados = (pulso) => (pulso - PULSO_CENTRO) * GRADOS_RECORRIDO / (SERVO_MAX_US - SERVO_MIN_US);
@@ -584,7 +588,8 @@ function puntosDelBrazo(pose) {
   const sumar = (a, b, n = 1) => ({ x: a.x + b.x * n, y: a.y + b.y * n, z: a.z + b.z * n });
 
   const e1 = radianes(pose.hombro);
-  const e2 = radianes(pose.hombro - 90 + pose.codo);
+  // El antebrazo sigue al brazo, doblado lo que diga el codo
+  const e2 = radianes(pose.hombro + pose.codo);
   const hombro = { x: 0, y: 0, z: MEDIDAS.alturaBase };
   const codo = sumar(hombro, enPlano(Math.cos(e1), Math.sin(e1)), MEDIDAS.brazo);
   const muneca = sumar(codo, enPlano(Math.cos(e2), Math.sin(e2)), MEDIDAS.antebrazo);
