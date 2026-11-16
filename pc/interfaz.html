@@ -27,6 +27,9 @@
   se ve cuando el esclavo no lo está copiando (por ejemplo, al reproducir).
   La vista se gira arrastrando con el mouse y se acerca con la rueda.
 
+  Al final está la curva de torque de la garra contra la corriente del servo,
+  con los puntos medidos con el resorte y la recta de ajuste (ver el README).
+
   Para probar la página sin la placa, abrirla con "?demo" al final de la
   dirección (por ejemplo interfaz.html?demo): genera datos inventados.
 -->
@@ -130,6 +133,9 @@
   }
   .control h2 { font-size: 16px; margin: 0 8px 0 0; }
   button:disabled { opacity: 0.45; cursor: default; }
+  .curva { margin-top: 16px; }
+  .curva h2 { font-size: 16px; margin: 0 0 4px; }
+  #lienzo-curva { height: 260px; }
 
   /* ---------- Animación del brazo ---------- */
   .brazo {
@@ -214,6 +220,15 @@
 </div>
 
 <div class="graficos" id="graficos"></div>
+
+<div class="tarjeta curva">
+  <h2>Torque de la garra contra corriente</h2>
+  <div class="valores">
+    <span class="pulso">● Medido con el resorte</span> &nbsp;
+    Recta: τ ≈ 0,0274 N·mm/mA × (I − 45 mA)
+  </div>
+  <canvas id="lienzo-curva"></canvas>
+</div>
 
 <div class="tarjeta" id="mensajes"></div>
 
@@ -517,11 +532,106 @@ function dibujarGrafico(lienzo, muestras) {
   curva("pulso", PULSO_MIN, PULSO_MAX, "--pulso");
 }
 
-/** @brief Redibuja los 4 gráficos en cada cuadro de la pantalla. */
+/* ---------- Curva de torque contra corriente ---------- */
+
+/*
+ * Caracterización de la garra (ver README, Ensayos): un resorte de 41,3 N/m
+ * enganchado a 40 mm del tornillo de cada pinza. El torque es la fuerza del
+ * resorte por esos 40 mm.
+ */
+const MEDICIONES_TORQUE = [
+  { corriente: 60, torque: 0 },
+  { corriente: 250, torque: 6.61 },
+  { corriente: 380, torque: 8.59 },
+];
+
+/** Recta de ajuste: torque = TORQUE_PENDIENTE × (corriente − CORRIENTE_SIN_TORQUE). */
+const TORQUE_PENDIENTE = 0.0274;   // N·mm por mA
+const CORRIENTE_SIN_TORQUE = 45;   // mA
+
+/** Rango de los ejes de la curva. */
+const CURVA_CORRIENTE_MAX = 500;   // mA
+const CURVA_TORQUE_MAX = 12;       // N·mm
+
+/**
+ * @brief Dibuja la curva de torque contra corriente: los puntos medidos y la
+ *        recta de ajuste.
+ * @param lienzo El canvas donde se dibuja.
+ */
+function dibujarCurvaTorque(lienzo) {
+  const escala = window.devicePixelRatio || 1;
+  const ancho = lienzo.clientWidth;
+  const alto = lienzo.clientHeight;
+  if (lienzo.width !== ancho * escala || lienzo.height !== alto * escala) {
+    lienzo.width = ancho * escala;
+    lienzo.height = alto * escala;
+  }
+  const ctx = lienzo.getContext("2d");
+  ctx.setTransform(escala, 0, 0, escala, 0, 0);
+  ctx.clearRect(0, 0, ancho, alto);
+
+  const estilos = getComputedStyle(document.documentElement);
+  const color = (nombre) => estilos.getPropertyValue(nombre).trim();
+
+  const izq = 40, der = 16, arriba = 24, abajo = 22;
+  const anchoUtil = ancho - izq - der;
+  const altoUtil = alto - arriba - abajo;
+  const x = (corriente) => izq + anchoUtil * corriente / CURVA_CORRIENTE_MAX;
+  const y = (torque) => arriba + altoUtil * (1 - torque / CURVA_TORQUE_MAX);
+
+  // Grilla y números de los dos ejes
+  ctx.font = "11px system-ui, sans-serif";
+  ctx.lineWidth = 1;
+  ctx.fillStyle = color("--suave");
+  for (let t = 0; t <= CURVA_TORQUE_MAX; t += 3) {
+    ctx.strokeStyle = color("--grilla");
+    ctx.beginPath();
+    ctx.moveTo(izq, y(t));
+    ctx.lineTo(ancho - der, y(t));
+    ctx.stroke();
+    ctx.textAlign = "right";
+    ctx.fillText(t, izq - 4, y(t) + 4);
+  }
+  for (let c = 0; c <= CURVA_CORRIENTE_MAX; c += 100) {
+    // El último número va alineado a la derecha para que no se corte
+    ctx.textAlign = c === CURVA_CORRIENTE_MAX ? "right" : "center";
+    ctx.fillText(c === CURVA_CORRIENTE_MAX ? c + " mA" : c, x(c), alto - 6);
+  }
+  ctx.textAlign = "left";
+  ctx.fillText("N·mm", izq - 24, 10);
+
+  // Recta de ajuste, desde donde el torque es 0 hasta el borde del gráfico
+  const corrienteFinal = Math.min(CURVA_CORRIENTE_MAX,
+    CORRIENTE_SIN_TORQUE + CURVA_TORQUE_MAX / TORQUE_PENDIENTE);
+  ctx.strokeStyle = color("--pulso");
+  ctx.globalAlpha = 0.5;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(x(CORRIENTE_SIN_TORQUE), y(0));
+  ctx.lineTo(x(corrienteFinal), y(TORQUE_PENDIENTE * (corrienteFinal - CORRIENTE_SIN_TORQUE)));
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+
+  // Puntos medidos, con un borde del color de la tarjeta para que se separen de la recta
+  MEDICIONES_TORQUE.forEach((m) => {
+    ctx.beginPath();
+    ctx.arc(x(m.corriente), y(m.torque), 5, 0, 2 * Math.PI);
+    ctx.fillStyle = color("--pulso");
+    ctx.fill();
+    ctx.strokeStyle = color("--tarjeta");
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  });
+}
+
+const lienzoCurva = document.getElementById("lienzo-curva");
+
+/** @brief Redibuja los 4 gráficos y la curva en cada cuadro de la pantalla. */
 function dibujarTodo() {
   for (let i = 0; i < SERVOS.length; i++) {
     dibujarGrafico(lienzos[i], historial[i]);
   }
+  dibujarCurvaTorque(lienzoCurva);
   requestAnimationFrame(dibujarTodo);
 }
 
