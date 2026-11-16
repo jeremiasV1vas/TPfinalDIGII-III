@@ -47,10 +47,10 @@ Si se cambia la fuente o se mueve el cableado, conviene volver a tomar la refere
 
 Con la referencia tomada, la palanca del maestro deja de pedir una posición y pasa a pedir una carga: apenas apretada pide `CARGA_CONTACTO` (un agarre suave) y a fondo pide `CARGA_MAX`. La garra trabaja en dos etapas:
 
-1. **Buscar:** se va cerrando de a poco (`VELOCIDAD_BUSQUEDA`) hasta que la carga pasa `CARGA_CONTACTO` durante 3 ticks seguidos. Ahí tocó el objeto.
+1. **Buscar:** se va cerrando (`VELOCIDAD_BUSQUEDA`, de abierta a cerrada en 0,8 s) hasta que la carga pasa `CARGA_CONTACTO` durante 3 ticks seguidos. Ahí tocó el objeto.
 2. **Apretar:** el PID calcula cuánto cerrar más allá del punto de contacto para que la carga medida llegue a la pedida.
 
-Al soltar la palanca la garra se abre, y la próxima vez vuelve a buscar. En la interfaz se ven arriba la *carga* y la *carga pedida*: con el PID andando, la primera tiene que seguir a la segunda.
+Al soltar la palanca la garra se abre, y la próxima vez vuelve a buscar. Mientras está abierta y quieta, la referencia se actualiza sola con cada lectura, porque la fuente de 5 V sube y baja tanto como lo que mueve la garra (en la primera prueba, una referencia tomada en un mal momento dejó la carga corrida 30 cuentas). El botón hace falta igual para la primera, que es la que habilita el control de fuerza. En la interfaz se ven arriba la *carga* y la *carga pedida*: con el PID andando, la primera tiene que seguir a la segunda.
 
 Para ajustarlo en la placa:
 

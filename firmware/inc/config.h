@@ -121,7 +121,7 @@
  */
 #define CARGA_MAX          80   ///< Carga pedida con la palanca a fondo (unos 480 mA).
 #define CARGA_CONTACTO     30   ///< Carga a partir de la cual se toma que tocó el objeto (unos 180 mA).
-#define VELOCIDAD_BUSQUEDA 10   ///< Cuánto se cierra por tick mientras busca el objeto (de 0 a 1000 en 2 s).
+#define VELOCIDAD_BUSQUEDA 25   ///< Cuánto se cierra por tick mientras busca el objeto (de 0 a 1000 en 0,8 s).
 #define PID_KP             0.2f ///< Cierre (de 0 a 1000) por cada cuenta de error.
 #define PID_KI             5.0f ///< Cierre por cada cuenta de error acumulada durante un segundo.
 #define PID_KD             0.0f ///< La derivada queda en 0: con el ruido de la medición no ayudaba.

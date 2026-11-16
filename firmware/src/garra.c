@@ -14,6 +14,10 @@
  * Si se suelta la palanca, la garra se abre y la próxima vez vuelve a buscar.
  * Mientras no se tome la referencia no hay cómo medir la carga, así que la
  * garra va por posición, igual que las otras articulaciones.
+ *
+ * La lectura del divisor se mueve con la fuente de 5 V tanto como con la
+ * garra. Por eso, mientras la garra está abierta y quieta, la referencia se
+ * va actualizando sola, y cuando se aprieta la palanca se usa la última.
  */
 
 #include "config.h"
@@ -34,6 +38,12 @@
 #define TICKS_CONTACTO 3
 
 /**
+ * Ticks que se espera con la garra abierta antes de actualizar la referencia
+ * (500 ms), para que ya haya terminado de abrirse y no esté consumiendo.
+ */
+#define TICKS_QUIETA (500 / TICK_MS)
+
+/**
  * Lectura del divisor con la garra libre. Queda en 0 hasta que se aprieta el
  * botón de referencia.
  */
@@ -42,6 +52,7 @@ static uint16_t referencia = 0;
 static float carga_pedida = 0;   ///< Lo que pide la palanca, en cuentas.
 static float carga_anterior = 0; ///< Carga del tick anterior, para la derivada.
 
+static uint8_t ticks_abierta = 0;   ///< Ticks seguidos con la palanca suelta.
 static uint8_t en_contacto = 0;     ///< 1 mientras la garra está apretando el objeto.
 static uint8_t ticks_arriba = 0;    ///< Ticks seguidos con la carga arriba de CARGA_CONTACTO.
 static float cierre_contacto = 0;   ///< Cierre en el que tocó el objeto, de 0 a 1000.
@@ -129,7 +140,17 @@ void garra_actualizar(uint16_t cierre) {
         // Palanca suelta: se abre y la próxima vez vuelve a buscar el objeto
         reiniciar_control();
         mover_garra(GARRA_ABIERTA_US);
+
+        // Ya abierta y quieta, la lectura es la de la garra sin carga: se
+        // toma como referencia nueva, así sigue a la fuente si sube o baja
+        if (ticks_abierta < TICKS_QUIETA) {
+            ticks_abierta++;
+        } else {
+            referencia = sensores_corriente();
+        }
     } else {
+        ticks_abierta = 0;
+
         // Con la palanca apenas apretada pide la carga de contacto, o sea un
         // agarre suave, y a fondo pide CARGA_MAX
         carga_pedida = CARGA_CONTACTO + (CARGA_MAX - CARGA_CONTACTO) * (cierre - CIERRE_MINIMO) / (1000.0f - CIERRE_MINIMO);
@@ -147,8 +168,13 @@ void garra_actualizar(uint16_t cierre) {
                 ticks_arriba = 0;
             }
             if (ticks_arriba >= TICKS_CONTACTO) {
+                // Tocó hace TICKS_CONTACTO ticks, y desde ahí siguió cerrando:
+                // el punto de contacto se toma donde estaba en ese momento
                 en_contacto = 1;
-                cierre_contacto = cierre_actual;
+                cierre_contacto = cierre_actual - VELOCIDAD_BUSQUEDA * TICKS_CONTACTO;
+                if (cierre_contacto < 0) {
+                    cierre_contacto = 0;
+                }
                 integral = 0;
             }
         } else {
