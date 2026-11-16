@@ -67,11 +67,11 @@
  * @{
  */
 
-/// Base: todo el recorrido del pote va a todo el recorrido del servo.
+/// Base: todo el recorrido del pote va a todo el recorrido del servo. Gira al revés que el maestro, por eso A va a 180° y B a 0°.
 #define CAL_BASE_POTE_A    0
 #define CAL_BASE_POTE_B    4095
-#define CAL_BASE_PULSO_A   SERVO_0_GRADOS_US
-#define CAL_BASE_PULSO_B   SERVO_180_GRADOS_US
+#define CAL_BASE_PULSO_A   SERVO_180_GRADOS_US
+#define CAL_BASE_PULSO_B   SERVO_0_GRADOS_US
 
 /// Hombro: recto marca 2182 (90°), y de ahí 90° para cada lado.
 #define CAL_HOMBRO_POTE_A  817
