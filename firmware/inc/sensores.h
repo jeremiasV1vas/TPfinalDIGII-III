@@ -38,9 +38,13 @@ void sensores_promediar(void);
 uint16_t sensores_pote(uint8_t canal);
 
 /**
- * @brief Promedio de la corriente de la garra en los últimos 20 ms.
+ * @brief Promedio de la lectura del divisor de la garra (AD0.5) en los
+ * últimos 20 ms.
  *
- * @return Lectura del ADC de 0 a 4095, sin pasar a mA.
+ * Baja cuando la garra pide más corriente. La cuenta para pasarlo a carga
+ * está en garra.c.
+ *
+ * @return Lectura del ADC de 0 a 4095.
  */
 uint16_t sensores_corriente(void);
 

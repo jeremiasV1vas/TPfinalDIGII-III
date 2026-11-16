@@ -15,6 +15,10 @@
  * Cada vez que cambia el modo, el esclavo va despacio (en 1 segundo) desde
  * donde está hasta donde tiene que ir, para que no pegue un salto.
  *
+ * El tercer botón (P2.13) guarda la referencia de la garra: la lectura del
+ * divisor con la garra libre, contra la que después se mide cuánto aprieta.
+ * Se aprieta una vez al arrancar, con la garra abierta y sin agarrar nada.
+ *
  * Cada TELEMETRIA_CADA ticks se manda el estado a la PC por la UART, para
  * verlo en pc/interfaz.html.
  */
@@ -247,11 +251,25 @@ static uint8_t cambiar_modo(modo_t nuevo) {
     return 1;
 }
 
+/**
+ * @brief Guarda la referencia de la garra y avisa a la PC con el valor.
+ *
+ * La línea no empieza con $T, así que la interfaz la muestra en los mensajes.
+ */
+static void tomar_referencia(void) {
+    char texto[48];
+
+    garra_tomar_referencia();
+    sprintf(texto, "Referencia de la garra: %d\n", (int)garra_referencia());
+    serie_enviar(texto);
+}
+
 static void atender_botones(void) {
-    // Hay que llamar a botones_apretado() con los dos botones en cada tick,
+    // Hay que llamar a botones_apretado() con todos los botones en cada tick,
     // por eso se guardan antes de preguntar
     uint8_t grabar = botones_apretado(BOTON_GRABAR);
     uint8_t reproducir = botones_apretado(BOTON_REPRODUCIR);
+    uint8_t referencia = botones_apretado(BOTON_REFERENCIA);
 
     if (grabar) {
         if (modo == MODO_COPIA) {
@@ -268,6 +286,10 @@ static void atender_botones(void) {
             cambiar_modo(MODO_COPIA);
         }
     }
+
+    if (referencia) {
+        tomar_referencia();
+    }
 }
 
 /* ---------------------------------------------------------------------------
@@ -278,18 +300,20 @@ static void atender_botones(void) {
  * @brief Manda el estado a la PC en una línea:
  *
  * $T,modo,pote_base,pote_hombro,pote_codo,pote_garra,
- * pulso_base,pulso_hombro,pulso_codo,pulso_garra,pasos_grabados
+ * pulso_base,pulso_hombro,pulso_codo,pulso_garra,pasos_grabados,
+ * divisor_garra,carga_garra
  */
 static void enviar_estado(void) {
-    char texto[80];
+    char texto[96];
 
-    sprintf(texto, "$T,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n",
+    sprintf(texto, "$T,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n",
             (int)modo,
             (int)sensores_pote(POTE_BASE), (int)sensores_pote(POTE_HOMBRO),
             (int)sensores_pote(POTE_CODO), (int)sensores_pote(POTE_GARRA),
             (int)servo_get_us(SERVO_BASE), (int)servo_get_us(SERVO_HOMBRO),
             (int)servo_get_us(SERVO_CODO), (int)servo_get_us(SERVO_GARRA),
-            (int)secuencia_largo());
+            (int)secuencia_largo(),
+            (int)sensores_corriente(), (int)garra_carga());
 
     serie_enviar(texto);
 }

@@ -20,17 +20,22 @@
 /** Ticks que se ignora un botón después de apretarlo (300 ms). */
 #define TICKS_ANTIRREBOTE (300 / TICK_MS)
 
+/** Cantidad de botones. */
+#define CANTIDAD_BOTONES 3
+
 /** Las interrupciones ponen en 1 su aviso cuando ven un flanco de bajada. */
-static volatile uint8_t aviso[2];
+static volatile uint8_t aviso[CANTIDAD_BOTONES];
 
 /** Ticks que faltan para volver a hacerle caso a cada botón. */
-static uint8_t bloqueo[2];
+static uint8_t bloqueo[CANTIDAD_BOTONES];
 
-static const uint32_t pin_boton[2] = {BOTON_GRABAR_PIN, BOTON_REPRODUCIR_PIN};
+static const uint32_t pin_boton[CANTIDAD_BOTONES] = {BOTON_GRABAR_PIN, BOTON_REPRODUCIR_PIN,
+                                                     BOTON_REFERENCIA_PIN};
 
 void botones_init(void) {
     EXTI_PinConfig(EXTI_EINT1, EXTI_PULLUP);
     EXTI_PinConfig(EXTI_EINT2, EXTI_PULLUP);
+    EXTI_PinConfig(EXTI_EINT3, EXTI_PULLUP);
 
     EXTI_CFG_T eint;
     eint.mode = EXTI_EDGE_SENSITIVE;
@@ -40,6 +45,9 @@ void botones_init(void) {
     EXTI_ConfigEnable(&eint);
 
     eint.line = EXTI_EINT2;
+    EXTI_ConfigEnable(&eint);
+
+    eint.line = EXTI_EINT3;
     EXTI_ConfigEnable(&eint);
 }
 
@@ -74,4 +82,15 @@ void EINT1_IRQHandler(void) {
 void EINT2_IRQHandler(void) {
     EXTI_ClearFlag(EXTI_EINT2);
     aviso[BOTON_REPRODUCIR] = 1;
+}
+
+/**
+ * @brief Flanco de bajada en P2.13 (referencia de la garra).
+ *
+ * El EINT3 comparte la interrupción con las de GPIO, pero como no usamos
+ * interrupciones de GPIO, si entra acá es por el botón.
+ */
+void EINT3_IRQHandler(void) {
+    EXTI_ClearFlag(EXTI_EINT3);
+    aviso[BOTON_REFERENCIA] = 1;
 }
